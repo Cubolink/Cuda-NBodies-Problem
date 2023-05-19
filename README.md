@@ -1,5 +1,17 @@
 # Cuda-NBodies-Problem
 
+**This project** contains implementations to solve the N-Body Problem using three different computing architectures:
+* CPU
+* CUDA
+* OpenCL
+
+**This problem** is a physics problems, where we want to model the motions of each particle in a group of n-particles which
+interact gravitationally with each other. This means we have to compute the force between each pair of particles in order
+to get the total acceleration and movements of each particle.
+
+**The Goal** is to compare the performance of these different implementations, using different GPU block sizes, memory,
+problem's grid size, measuring the speed-ups.
+
 ## Build & Compile Instructions
 
 ### Building with CMake
