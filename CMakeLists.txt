@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(galaxy C CXX)
+project(galaxy C CXX CUDA)
 
 set(CMAKE_CUDA_STANDARD 14)
 
