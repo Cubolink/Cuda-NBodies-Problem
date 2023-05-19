@@ -200,8 +200,8 @@ void initGL(void)
     createVBO((GLuint*)&gVBO);
     renderer->setVBO(gVBO, numBodies);
     renderer->setSpriteSize(0.4f);
-    renderer->setShaders("../data/sprite.vert",
-    					 "../data/sprite.frag");
+    renderer->setShaders("../../../data/sprite.vert",
+    					 "../../../data/sprite.frag");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -561,7 +561,7 @@ int main(int argc, char** argv)
 		printf("number of body must be mulples of 4096\n");
 		exit(0);
 	}
-	loadData("../data/dubinski.tab", numBodies);
+	loadData("../../../data/dubinski.tab", numBodies);
 		
 	// OpenGL: create app window
 	glutInit(&argc, argv);
