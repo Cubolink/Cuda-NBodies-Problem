@@ -1,36 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
-project(galaxy C CXX CUDA)
+project(nbodies-problem C CXX)
 
-set(CMAKE_CUDA_STANDARD 14)
+# Check for CUDA availability
+find_package(CUDA)
 
-add_executable(galaxy galaxy.cpp ParticleRenderer.cpp galaxy_kernel.cu)
-
-set(CMAKE_CUDA_SAMPLES_INCLUDE_DIRECTORIES "C:/ProgramData/NVIDIA Corporation/CUDA Samples/v10.1/common/inc")
-
-set(CMAKE_CUDA_SAMPLES_INCLUDE_DIRECTORIES_2 "C:/Users/juani/Desktop/ComputerGraphics/GPU Computing/CUDA/cuda-samples/Common")
-
-
-message("CUDA TOOLKIT INCLUDE: " ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-message("CUDA SAMPLES INCLUDE: " ${CMAKE_CUDA_SAMPLES_INCLUDE_DIRECTORIES})
-
-target_include_directories(galaxy PUBLIC
-        "${PROJECT_SOURCE_DIR}/include"
-        "${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}"
-        "${CMAKE_CUDA_SAMPLES_INCLUDE_DIRECTORIES}"
-        "${CMAKE_CUDA_SAMPLES_INCLUDE_DIRECTORIES_2}"
-        )
-
-if((MSCV) OR (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"))
-    target_link_directories(
-            galaxy PUBLIC
-            lib/freeglut-3.0.0MSVC/x64
-            lib/glew
-    )
+if(CUDA_FOUND)
+  enable_language(CUDA)
+	set(CMAKE_CUDA_STANDARD 14)
+  set(USE_CUDA ON)
+else()
+  set(USE_CUDA OFF)
 endif()
 
-target_link_libraries(galaxy
-        "freeglut.lib"
-        "glew32.lib")
+set(PARTICLE_RENDERER_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/source/particle-renderer")
+set(PARTICLE_RENDERER_LIBRARY particle-renderer)
 
-#set_target_properties(default PROPERTIES
-#        CUDA_SEPARABLE_COMPILATION ON)
+add_subdirectory(source)
