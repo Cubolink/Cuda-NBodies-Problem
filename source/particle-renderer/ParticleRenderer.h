@@ -1,7 +1,5 @@
 /*
  * This code was modified from the NVIDIA CUDA examples
- *     specifically the nbody and ...
- *
  * S. James Lee, 2008 Fall
  */
  
@@ -19,7 +17,7 @@ public:
     ~ParticleRenderer();
     
     void setVBO(unsigned int vbo, int numParticles);
-	void setShaders(char * vert, char * frag);
+	void setShaders(const char* vert, const char* frag);
 
     void display(int mode = PARTICLE_POINTS);
 
@@ -42,7 +40,5 @@ protected: // data
     unsigned int m_texture;
     unsigned int m_vbo;
 };
-
-
 
 #endif

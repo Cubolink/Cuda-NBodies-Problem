@@ -1,7 +1,5 @@
 /*
  * This code was modified from the NVIDIA CUDA examples
- *     specifically the simpleGL and nbody and ...
- *
  * S. James Lee, 2008 Fall
  */
 
@@ -13,7 +11,7 @@
 #include <GL/glut.h>
 #endif
 
-#include <paramgl.h>
+#include <param/paramgl.h>
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>

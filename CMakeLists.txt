@@ -5,13 +5,14 @@ project(nbodies-problem C CXX)
 find_package(CUDA)
 
 if(CUDA_FOUND)
-  message(">>> CUDA found, building project with it")
   enable_language(CUDA)
 	set(CMAKE_CUDA_STANDARD 14)
   set(USE_CUDA ON)
 else()
-  message(">>> CUDA was not found")
   set(USE_CUDA OFF)
 endif()
+
+set(PARTICLE_RENDERER_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/source/particle-renderer")
+set(PARTICLE_RENDERER_LIBRARY particle-renderer)
 
 add_subdirectory(source)
