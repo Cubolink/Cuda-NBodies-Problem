@@ -7,6 +7,15 @@
 #define damping 1.0f				// 0.999f
 #define ep 0.67f						// 0.5f
 
+
+/**
+ * Calculate pull acceleration that gravity of body j induces into body i
+ *
+ * @param bi body i
+ * @param bj body j
+ * @param ai acceleration of body i
+ * @return
+ */
 __device__ float3
 bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
 {
@@ -22,7 +31,9 @@ bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
    	float dist = sqrtf(distSqr);
    	float distCube = dist * dist * dist;
 
+    // if distances too small, maintain acceleration
 	if (distCube < 1.0f) return ai;
+    // otherwise, update acceleration
 	
     float s = bi.w / distCube;
     //float s = 1.0f / distCube;
@@ -37,15 +48,29 @@ bodyBodyInteraction(float4 bi, float4 bj, float3 ai)
 __device__ float3
 tile_calculation(float4 myPosition, float3 acc)
 {
+    // Calculate the interactions between bodies in the shared memory, not in between all bodies.
 	extern __shared__ float4 shPosition[];
 	
 	#pragma unroll 8
+    // Update over and over again the acceleration, for each interaction with this body.
 	for (unsigned int i = 0; i < BSIZE; i++)
 		acc = bodyBodyInteraction(myPosition, shPosition[i], acc);
 		
 	return acc;
 }
 
+/**
+ * Updates the position and velocity of the thread's assigned body.
+ * Each thread worries about a particle.
+ *
+ * @param pos
+ * @param pdata
+ * @param width
+ * @param height
+ * @param step
+ * @param apprx
+ * @param offset
+ */
 __global__ void 
 galaxyKernel(float4* pos, float4 * pdata, unsigned int width, 
 			 unsigned int height, float step, int apprx, int offset)
@@ -71,16 +96,25 @@ galaxyKernel(float4* pos, float4 * pdata, unsigned int width,
 	unsigned int loop = ((width * height) / apprx ) / BSIZE;
 	for (int i = 0; i < loop; i++)
 	{
+        // Each thread copy part of pdata into the shared memory shPosition
 		idx = threadIdx.y * blockDim.x + threadIdx.x;
 		shPosition[idx] = pdata[idx + start + BSIZE * i];
 
 		__syncthreads();
-		
+
+        // After all ended copying, we get the acceleration of the body
+        // obtained when interacting with all the bodies in shared memory
 		acc = tile_calculation(myPosition, acc);
-		
-		__syncthreads();		
+
+        // Wait until all threads computed their subsets of interactions
+		__syncthreads();
+
+        // In each iteration, the threads copy different parts of the memory into the shared memory, so then
+        // they update the acceleration gained of the body when interacting with the new bodies in the shared memory
 	}
-    	
+
+    // As now, we obtained the total acceleration of the current body, so we can update the position and velocity
+
     // update velocity with above acc
     myVelocity.x += acc.x * step;// * 2.0f;
     myVelocity.y += acc.y * step;// * 2.0f;
