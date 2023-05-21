@@ -298,7 +298,7 @@ void ParticleRenderer::_drawPoints(bool color)
             for (int i = 0; i < m_numParticles; ++i)
             {
                 glVertex3fv(&m_pos[k]);
-                k += 4;
+                k += 3;
             }
         }
         glEnd();
@@ -317,5 +317,9 @@ void ParticleRenderer::_drawPoints(bool color)
 		glDisableClientState(GL_VERTEX_ARRAY);
 		glDisableClientState(GL_COLOR_ARRAY); 
     }
+}
+
+void ParticleRenderer::setMPos(float *pos) {
+    m_pos = pos;
 }
 

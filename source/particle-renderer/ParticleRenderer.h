@@ -19,6 +19,8 @@ public:
     void setVBO(unsigned int vbo, int numParticles);
 	void setShaders(const char* vert, const char* frag);
 
+    void setMPos(float* pos);
+
     void display(int mode = PARTICLE_POINTS);
 
     void setPointSize(float size)  { m_pointSize = size; }

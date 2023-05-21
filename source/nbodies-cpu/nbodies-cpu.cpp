@@ -58,7 +58,10 @@ void initGL()
 // particle renderer
   renderer = new ParticleRenderer(numBodies);
   createVBO((GLuint*) &gVBO);
-  renderer->setVBO(gVBO, numBodies);
+
+  //renderer->setVBO(gVBO, numBodies);
+  renderer->setMPos((float*) dataPositions);
+
   renderer->setSpriteSize(0.4f);
   renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
