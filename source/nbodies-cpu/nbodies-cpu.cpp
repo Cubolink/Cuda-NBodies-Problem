@@ -7,38 +7,30 @@
 #include <GL/glut.h>
 #endif
 
-#include <param/paramgl.h>
 #include <cstdlib>
 #include <cstdio>
-#include <algorithm>
-#include <assert.h>
-#include <math.h>
-#include "ParticleRenderer.h"
+
 #include "simulation.h"
 #include "data-loader.h"
 
-ParticleRenderer* renderer = 0;
+#include "ParticleRenderer.h"
+#include "framerate.h"
+#include "controller.h"
+
+ParticleRenderer* renderer = nullptr;
 int 	numBodies = 16384;
 
-GLuint	gVBO = 0;				// 8 float (4 position, 4 color)
+// simulation parameter
+float scaleFactor = 1.5f;
+
+
+// simulation data
 float3 *dataPositions;
 float3 *dataVelocities;
 float *dataMasses;
 
-void createVBO(GLuint* vbo)
-{
-    // create buffer object
-    glGenBuffers( 1, vbo);
-    glBindBuffer( GL_ARRAY_BUFFER, *vbo);
+Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
-    // initialize buffer object
-    unsigned int size = numBodies * 8 * sizeof( float); //4
-    glBufferData( GL_ARRAY_BUFFER, size, 0, GL_DYNAMIC_DRAW);
-
-    glBindBuffer( GL_ARRAY_BUFFER, 0);
-
-    //CUT_CHECK_ERROR_GL();
-}
 
 void initGL()
 {
@@ -57,22 +49,9 @@ void initGL()
 
 // particle renderer
   renderer = new ParticleRenderer(numBodies);
-  createVBO((GLuint*) &gVBO);
-
-  //renderer->setVBO(gVBO, numBodies);
   renderer->setMPos((float*) dataPositions);
-
   renderer->setSpriteSize(0.4f);
   renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
-}
-
-
-void deleteVBO( GLuint* vbo)
-{
-    glBindBuffer( 1, *vbo);
-    glDeleteBuffers( 1, vbo);
-
-    *vbo = 0;
 }
 
 
@@ -80,13 +59,84 @@ void display()
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+  // view transform
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+
+  controller->updateCameraProperties();
+  float* camera_trans_lag = controller->getCameraTransLag();
+  float* camera_rot_lag = controller->getCameraTransLag();
+
+  glTranslatef(camera_trans_lag[0],
+                 camera_trans_lag[1],
+                 camera_trans_lag[2]);
+  glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
+  glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+
   renderer->display(1);
+  framerateUpdate();
 
   glutSwapBuffers();
 
   glutReportErrors();
 }
 
+void reshape(int w, int h)
+{
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(60.0, (float) w / (float) h, 0.1, 100000.0);
+
+    glMatrixMode(GL_MODELVIEW);
+    glViewport(0, 0, w, h);
+
+    controller->setScreenSize(w, h);
+}
+
+void mouse(int button, int state, int x, int y)
+{
+    if (state == GLUT_DOWN)
+        controller->setButtonState(button + 1);
+    else if (state == GLUT_UP)
+        controller->setButtonState(0);
+
+    controller->setCameraOxOy(x, y);
+
+    glutPostRedisplay();
+
+}
+
+void motion(int x, int y)
+{
+    controller->cameraMotion(x, y);
+    glutPostRedisplay();
+
+}
+
+void key(unsigned char key, int x, int y)
+{
+
+    switch (key)
+    {
+        case '\033':
+        case 'q':
+            exit(0);
+            break;
+    }
+
+    glutPostRedisplay();
+}
+
+void special(int key, int x, int y)
+{
+
+    glutPostRedisplay();
+}
+
+void idle()
+{
+    glutPostRedisplay();
+}
 
 int main(int argc, char** argv)
 {
@@ -97,7 +147,7 @@ int main(int argc, char** argv)
     loadData("../../../data/dubinski.tab", numBodies,
              dataPositions, dataVelocities, dataMasses);
 
-  // OpenGL: create app window
+    // OpenGL: create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
@@ -105,25 +155,23 @@ int main(int argc, char** argv)
 	sprintf(wtitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
 	glutCreateWindow(wtitle);
 
-  // GL setup	
+    // GL setup
 	initGL();
 
-  // GL callback function
-  glutDisplayFunc(display);
-  // glutReshapeFunc(reshape);
-  // glutMouseFunc(mouse);
-  // glutMotionFunc(motion);
-  // glutKeyboardFunc(key);
-  // glutSpecialFunc(special);
-  // glutIdleFunc(idle);
+    // GL callback function
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
+    glutKeyboardFunc(key);
+    glutSpecialFunc(special);
+    glutIdleFunc(idle);
 
-  // let's start main loop
-  glutMainLoop();
+    // let's start main loop
+    glutMainLoop();
 
-	deleteVBO((GLuint*) &gVBO);
+    if (renderer)
+        delete renderer;
 
-	if (renderer)
-		delete renderer;
-
-  return 0;
+    return 0;
 }
