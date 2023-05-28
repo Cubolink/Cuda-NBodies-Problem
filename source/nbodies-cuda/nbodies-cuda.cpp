@@ -25,6 +25,7 @@
 
 #include "ParticleRenderer.h"
 #include "framerate.h"
+#include "controller.h"
 
 
 int cutGetCmdLineArgumenti(int argc, const char** argv, const char* argName, int* value) {
@@ -75,17 +76,7 @@ GLuint	gVBO = 0;				// 8 float (4 position, 4 color)
 float*	d_particleData = 0;		// device side particle data storage
 float*	h_particleData = 0;		// host side particle data storage
 
-// view params
-int 	ox = 0, oy = 0;
-int 	buttonState        = 0;
-float 	camera_trans[]     = {0, 6*scaleFactor, -45*scaleFactor};
-float 	camera_rot[]       = {0, 0, 0};
-float 	camera_trans_lag[] = {0, 6*scaleFactor, -45*scaleFactor};
-float 	camera_rot_lag[]   = {0, 0, 0};
-const float inertia        = 0.1;
-
-float   sw = 720.0f;
-float	sh = 480.0f;
+Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // cuda related...
 int 	numBlocks = 1;
@@ -162,14 +153,7 @@ void init(int bodies)
 void reset(void)
 {
    	// reset camera
-   	camera_trans[0] = 0; 
-   	camera_trans[1] = 6 * scaleFactor; 
-   	camera_trans[2] = -45 * scaleFactor;
-	camera_rot[0] = camera_rot[1] = camera_rot[2] = 0;
-	camera_trans_lag[0] = 0; 
-	camera_trans_lag[1] = 6 * scaleFactor; 
-	camera_trans_lag[2] = -45 * scaleFactor;
-	camera_rot_lag[0] = camera_rot_lag[1] = camera_rot_lag[2] = 0;
+   	controller->cameraReset(scaleFactor);
 	
 	// reset dataset
 	CUDA_SAFE_CALL( cudaMemcpy(d_particleData, h_particleData,
@@ -240,11 +224,11 @@ void display(void)
     // view transform
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    for (int c = 0; c < 3; ++c)
-    {
-        camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
-        camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
-    }
+
+    controller->updateCameraProperties();
+    float* camera_trans_lag = controller->getCameraTransLag();
+    float* camera_rot_lag = controller->getCameraRotLag();
+
     glTranslatef(camera_trans_lag[0], 
 		     camera_trans_lag[1], 
 		     camera_trans_lag[2]);
@@ -275,12 +259,11 @@ void reshape(int w, int h)
     glViewport(0, 0, w, h);
     
     //
-    gSpriteSize *= (float)w / sw;
-    gPointSize *= (float)w / sw;
+    gSpriteSize *= (float)w / controller->getScreenWidth();
+    gPointSize *= (float)w / controller->getScreenWidth();
     
     //
-    sw = w;
-    sh = h;
+    controller->setScreenSize(w, h);
     
     
 }
@@ -292,9 +275,9 @@ void mouse(int button, int state, int x, int y)
     int mods;
 
     if (state == GLUT_DOWN)
-        buttonState = button + 1;
+        controller->setButtonState(button + 1);
     else if (state == GLUT_UP)
-        buttonState = 0;
+        controller->setButtonState(0);
 
     mods = glutGetModifiers();
     if (mods & GLUT_ACTIVE_SHIFT) 
@@ -306,7 +289,7 @@ void mouse(int button, int state, int x, int y)
         //buttonState = 3;
     }
 
-    ox = x; oy = y;
+    controller->setCameraOxOy(x, y);
 
     glutPostRedisplay();
 
@@ -315,29 +298,7 @@ void mouse(int button, int state, int x, int y)
 ////////////////////////////////////////////////////////////////////////////////
 void motion(int x, int y)
 {
-
-    float dx = x - ox;
-    float dy = y - oy;
-
-    if (buttonState == 3) 
-    {
-        // left+middle = zoom
-        camera_trans[2] += (dy / 100.0) * 0.5 * fabs(camera_trans[2]);
-    } 
-    else if (buttonState & 2) 
-    {
-        // middle = translate
-        camera_trans[0] += 0.005f * fabs(camera_trans[2]) * dx * (720.0f/sw) / 2.0;
-        camera_trans[1] -= 0.005f * fabs(camera_trans[2]) * dy * (480.0f/sh) / 2.0;
-    }
-    else if (buttonState & 1) 
-    {
-        // left = rotate
-        camera_rot[0] += dy / 5.0;
-        camera_rot[1] += dx / 5.0;
-    }
-    
-    ox = x; oy = y;
+    controller->cameraMotion(x, y);
 	glutPostRedisplay();
 	
 }

@@ -1,4 +1,8 @@
-add_library(particle-renderer STATIC ParticleRenderer.cpp ParticleRenderer.h)
+add_library(particle-renderer STATIC
+        ParticleRenderer.cpp ParticleRenderer.h
+        camera.cpp camera.h
+        controller.cpp controller.h
+        )
 
 set_property(TARGET particle-renderer PROPERTY CXX_STANDARD 20)
 target_include_directories(particle-renderer PRIVATE "${PROJECT_SOURCE_DIR}/include")

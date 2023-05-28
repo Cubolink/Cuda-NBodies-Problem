@@ -14,11 +14,16 @@
 #include <assert.h>
 #include <math.h>
 #include "ParticleRenderer.h"
+#include "simulation.h"
+#include "data-loader.h"
 
 ParticleRenderer* renderer = 0;
 int 	numBodies = 16384;
 
 GLuint	gVBO = 0;				// 8 float (4 position, 4 color)
+float3 *dataPositions;
+float3 *dataVelocities;
+float *dataMasses;
 
 void createVBO(GLuint* vbo)
 {
@@ -53,7 +58,10 @@ void initGL()
 // particle renderer
   renderer = new ParticleRenderer(numBodies);
   createVBO((GLuint*) &gVBO);
-  renderer->setVBO(gVBO, numBodies);
+
+  //renderer->setVBO(gVBO, numBodies);
+  renderer->setMPos((float*) dataPositions);
+
   renderer->setSpriteSize(0.4f);
   renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
@@ -82,6 +90,13 @@ void display()
 
 int main(int argc, char** argv)
 {
+    // Data loading
+    dataPositions = new float3[numBodies];
+    dataVelocities = new float3[numBodies];
+    dataMasses = new float[numBodies];
+    loadData("../../../data/dubinski.tab", numBodies,
+             dataPositions, dataVelocities, dataMasses);
+
   // OpenGL: create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
