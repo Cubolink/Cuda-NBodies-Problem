@@ -12,8 +12,10 @@
 
 #include "data-structs.h"
 
-void loadData(const char* filename, int bodies, float3 *positions, float3 *velocities, float *masses)
+void loadData(const char* filename, int bodies, float3 *positions, float3 *velocities, float *masses, float scaleFactor)
 {
+    int skip = 49152 / bodies;
+
     std::ifstream fin(filename);
     if (!fin) {
         std::cout << "Error reading the file " << filename;
@@ -22,22 +24,31 @@ void loadData(const char* filename, int bodies, float3 *positions, float3 *veloc
 
     std::string line;
     int i = 0;
-    while(std::getline(fin, line, '\n') && i < bodies)
+    bool end_file = false;
+    while(i < bodies)
     {
+        for (int j = 0; j < skip; j++)
+        {
+            if(!std::getline(fin, line, '\n'))
+                end_file = true;
+
+            if (end_file)
+                break;
+        }
+        if (end_file)
+            break;
+
         std::stringstream ss(line);
         std::string item;
 
+
         // Position
         std::getline(ss, item, ' ');
-        positions[i].x = std::stof(item);
+        positions[i].x = std::stof(item) * scaleFactor;
         std::getline(ss, item, ' ');
-        positions[i].y = std::stof(item);
+        positions[i].y = std::stof(item) * scaleFactor;
         std::getline(ss, item, ' ');
-        positions[i].z = std::stof(item);
-
-        // Mass
-        std::getline(ss, item, ' ');
-        masses[i] = std::stof(item);
+        positions[i].z = std::stof(item) * scaleFactor;
 
         // Velocity
         std::getline(ss, item, ' ');

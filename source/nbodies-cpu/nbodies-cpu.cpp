@@ -145,7 +145,7 @@ int main(int argc, char** argv)
     dataVelocities = new float3[numBodies];
     dataMasses = new float[numBodies];
     loadData("../../../data/dubinski.tab", numBodies,
-             dataPositions, dataVelocities, dataMasses);
+             dataPositions, dataVelocities, dataMasses, scaleFactor);
 
     // OpenGL: create app window
 	glutInit(&argc, argv);
