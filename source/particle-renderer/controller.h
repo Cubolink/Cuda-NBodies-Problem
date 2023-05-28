@@ -55,6 +55,7 @@ public:
     void setButtonState(int newState)
     {
         buttonState = newState;
+        camera->printPosition();
     }
 
     void setScreenSize(int newSw, int newSh)

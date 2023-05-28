@@ -6,6 +6,7 @@
 #define NBODIES_PROBLEM_CAMERA_H
 
 #include <cmath>
+#include <iostream>
 
 class Camera
 {
@@ -84,7 +85,16 @@ public:
     float* getRotLag() {
         return camera_rot_lag;
     }
-
+    void printPosition() {
+        std::cout << "Camera trans: ("
+            << camera_trans[0] << ", "
+            << camera_trans[1] << ", "
+            << camera_trans[2] << ")" << "\t";
+        std::cout << "Camera rot: ("
+            << camera_rot[0] << ", "
+            << camera_rot[1] << ", "
+            << camera_rot[2] << ")" << std::endl;
+    }
 };
 
 
