@@ -6,10 +6,6 @@
 #ifndef __PARTICLERENDERER_H__
 #define __PARTICLERENDERER_H__
 
-#define PARTICLE_POINTS 0
-#define PARTICLE_SPRITES 1
-#define PARTICLE_SPRITES_COLOR 2
-
 class ParticleRenderer
 {
 public:
@@ -19,19 +15,17 @@ public:
     void setVBO(unsigned int vbo, int numParticles);
 	void setShaders(const char* vert, const char* frag);
 
-    void setMPos(float* pos);
+    void display();
 
-    void display(int mode = PARTICLE_POINTS);
-
+    void setPos(float *pos) { m_pos = pos; }
     void setPointSize(float size)  { m_pointSize = size; }
     void setSpriteSize(float size) { m_spriteSize = size; }
 
-protected: // methods
+protected: // Methods
     void _createTexture(int resolution);
     void _drawPoints(bool color = false);
 
-protected: // data
-	int 	m_mode;
+protected: // Data
     float*	m_pos;
     int		m_numParticles;
 

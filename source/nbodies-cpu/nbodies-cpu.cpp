@@ -49,7 +49,7 @@ void initGL()
 
 // particle renderer
   renderer = new ParticleRenderer(numBodies);
-  renderer->setMPos((float*) dataPositions);
+  renderer->setPos((float*) dataPositions);
   renderer->setSpriteSize(0.4f);
   renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
@@ -73,7 +73,7 @@ void display()
   glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
   glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
 
-  renderer->display(1);
+  renderer->display();
   framerateUpdate();
 
   glutSwapBuffers();

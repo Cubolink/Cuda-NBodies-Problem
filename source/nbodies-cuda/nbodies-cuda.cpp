@@ -65,7 +65,6 @@ int 	gApprx = 4;
 // GL drawing object
 ParticleRenderer* renderer = 0;
 int 	numBodies = 16384;
-int 	gDrawMode = 1;
 float 	gPointSize = 1.0f;
 float	gSpriteSize = scaleFactor*0.25f;
 
@@ -238,7 +237,7 @@ void display(void)
 	// render bodies
     renderer->setPointSize(gPointSize);
     renderer->setSpriteSize(gSpriteSize);
-    renderer->display(gDrawMode);
+    renderer->display();
 	
     // update frame rate
 	framerateUpdate();
@@ -316,10 +315,6 @@ void key(unsigned char key, int x, int y)
     case 'r':
     	// reset configuration
 		reset();
-    	break;
-    case 'd':
-    	// change rendering mode
-    	gDrawMode = (gDrawMode+1) % 3;
     	break;
     case '=':
     	// increase point size
