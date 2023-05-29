@@ -18,7 +18,6 @@ public:
     void display();
 
     void setPos(float *pos) { m_pos = pos; }
-    void setPointSize(float size)  { m_pointSize = size; }
     void setSpriteSize(float size) { m_spriteSize = size; }
 
 protected: // Methods
@@ -28,8 +27,6 @@ protected: // Methods
 protected: // Data
     float*	m_pos;
     int		m_numParticles;
-
-    float	m_pointSize;
     float	m_spriteSize;
 
     unsigned int m_program;

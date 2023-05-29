@@ -65,7 +65,6 @@ int 	gApprx = 4;
 // GL drawing object
 ParticleRenderer* renderer = 0;
 int 	numBodies = 16384;
-float 	gPointSize = 1.0f;
 float	gSpriteSize = scaleFactor*0.25f;
 
 // simulation data storage
@@ -235,7 +234,6 @@ void display(void)
     glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
 	
 	// render bodies
-    renderer->setPointSize(gPointSize);
     renderer->setSpriteSize(gSpriteSize);
     renderer->display();
 	
@@ -259,7 +257,6 @@ void reshape(int w, int h)
     
     //
     gSpriteSize *= (float)w / controller->getScreenWidth();
-    gPointSize *= (float)w / controller->getScreenWidth();
     
     //
     controller->setScreenSize(w, h);
@@ -318,15 +315,11 @@ void key(unsigned char key, int x, int y)
     	break;
     case '=':
     	// increase point size
-    	gPointSize += scaleFactor*0.0002f;
-    	LIMIT(gPointSize, 1.0f, scaleFactor*1.0f);
     	gSpriteSize += scaleFactor*0.02f;
     	LIMIT(gSpriteSize, 0.1f, scaleFactor*2.0f);
     	break;
     case '-':
     	// decrese point size
-    	gPointSize -= scaleFactor*0.0002f;
-    	LIMIT(gPointSize, 1.0f, scaleFactor*1.0f);
     	gSpriteSize -= scaleFactor*0.02f;
     	LIMIT(gSpriteSize, 0.1f, scaleFactor*2.0f);
     	break;

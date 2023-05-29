@@ -136,9 +136,8 @@ void printProgramLog(GLuint shad)
 
 
 ParticleRenderer::ParticleRenderer(int nParticles)
-: m_pos(0),
+: m_pos(nullptr),
   m_numParticles(nParticles),
-  m_pointSize(1.0f),
   m_spriteSize(2.0f),
   m_program(0),
   m_texture(0),
@@ -149,7 +148,11 @@ ParticleRenderer::ParticleRenderer(int nParticles)
 
 ParticleRenderer::~ParticleRenderer()
 {
-	m_pos = 0;
+	if (m_pos != nullptr)
+	{
+		free(m_pos);
+		m_pos = nullptr;
+	}
 }
 
 void ParticleRenderer::setVBO(unsigned int vbo, int numParticles)
