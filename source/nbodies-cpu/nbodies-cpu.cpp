@@ -65,7 +65,7 @@ void display()
 
   controller->updateCameraProperties();
   float* camera_trans_lag = controller->getCameraTransLag();
-  float* camera_rot_lag = controller->getCameraTransLag();
+  float* camera_rot_lag = controller->getCameraRotLag();
 
   glTranslatef(camera_trans_lag[0],
                  camera_trans_lag[1],
