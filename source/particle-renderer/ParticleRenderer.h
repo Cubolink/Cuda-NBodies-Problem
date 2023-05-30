@@ -13,7 +13,7 @@ public:
     ~ParticleRenderer();
     
     void setVBO(unsigned int vbo, int numParticles);
-	void setShaders(const char* vert, const char* frag);
+	  void setShaders(const char* vert, const char* frag);
 
     void display();
 

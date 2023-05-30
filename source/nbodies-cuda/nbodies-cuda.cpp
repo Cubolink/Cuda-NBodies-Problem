@@ -17,44 +17,14 @@
 #include <algorithm>
 #include <assert.h>
 #include <math.h>
-//#include <cutil.h>
-#define CUDA_SAFE_CALL(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 #include <cuda_runtime_api.h>
-//#include <cutil_gl_error.h>
 #include <cuda_gl_interop.h>
 
 #include "ParticleRenderer.h"
 #include "framerate.h"
 #include "controller.h"
 
-
-int cutGetCmdLineArgumenti(int argc, const char** argv, const char* argName, int* value) {
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], argName) == 0) {
-            if (i + 1 < argc) {
-                *value = atoi(argv[i + 1]);
-                return 1;
-            } else {
-                // Argument found, missing value
-                return 0;
-            }
-        }
-    }
-    // Argument is not found
-    return 0;
-}
-
-
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-    if (code != cudaSuccess)
-    {
-        fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-        if (abort) exit(code);
-    }
-}
-////////////////////////////////////////////////////////////////////////////////
-// simulation parameter
+// Simulation parameters
 float 	scaleFactor = 1.5f;		// 10.0f, 50
 float 	velFactor = 8.0f;			// 15.0f, 100
 float	massFactor = 120000.0f;	// 50000000.0,
@@ -62,31 +32,29 @@ float 	gStep = 0.001f;				// 0.005f
 int 	gOffset = 0;
 int 	gApprx = 4;
 
-// GL drawing object
-ParticleRenderer* renderer = 0;
-int 	numBodies = 16384;
-float	gSpriteSize = scaleFactor*0.25f;
-
-// simulation data storage
+// Simulation data storage
 float* 	gPos = 0;
 float* 	gVel = 0;
 GLuint	gVBO = 0;				// 8 float (4 position, 4 color)
-float*	d_particleData = 0;		// device side particle data storage
-float*	h_particleData = 0;		// host side particle data storage
+float*	dParticleData = 0;		// device side particle data storage
+float*	hParticleData = 0;		// host side particle data storage
 
+// GL drawing attributes
+ParticleRenderer* renderer = 0;
+int 	numBodies = 16384;
+float	spriteSize = scaleFactor*0.25f;
+
+// Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
-// cuda related...
-int 	numBlocks = 1;
-int 	numThreadsPerBlock = 256;
+// Cuda parameters
+int threadsPerBlock = 256;
 
-// useful clamp macro
-#define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min);}
+// Clamp macro
+#define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
 
-////////////////////////////////////////////////////////////////////////////////
-// forward declaration
+// Forward declarations
 void init(int bodies);
-void reset(void);
 void initGL(void);
 void runCuda(void);
 void display(void);
@@ -94,7 +62,6 @@ void reshape(int w, int h);
 void mouse(int button, int state, int x, int y);
 void motion(int x, int y);
 void key(unsigned char key, int x, int y);
-void special(int key, int x, int y);
 void idle(void);
 void loadData(char* filename, int bodies);
 void createVBO( GLuint* vbo);
@@ -103,16 +70,14 @@ void deleteVBO( GLuint* vbo);
 ////////////////////////////////////////////////////////////////////////////////
 void init(int bodies)
 {
+	// Blocks per grid
+	int numBlocks = bodies / threadsPerBlock;
 	
-	// blocks per grid
-	numBlocks = bodies / numThreadsPerBlock;
-	
-	// host particle data (position, velocity
-	h_particleData = (float *) malloc (8 * bodies * sizeof(float));
+	// Host particle data (position, velocity)
+	hParticleData = (float *) malloc (8 * bodies * sizeof(float));
 	
 	// device particle data
-	CUDA_SAFE_CALL(cudaMalloc( (void**) &d_particleData, 
-							   8 * bodies * sizeof(float)));
+	cudaMalloc( (void**) &dParticleData, 8 * bodies * sizeof(float));
 	
 	// load inital data set
 	int pCounter;
@@ -130,33 +95,19 @@ void init(int bodies)
 		else
 			offset = (idx + (bodies / 2)) % (bodies * 4);
 		// set value from global data storage
-		h_particleData[idx + 0]		= gPos[offset + 0];	// x
-		h_particleData[idx + 1] 	= gPos[offset + 1];	// y
-		h_particleData[idx + 2] 	= gPos[offset + 2];	// z
-		h_particleData[idx + 3] 	= gPos[offset + 3];	// mass
-		h_particleData[vidx + 0] 	= gVel[offset + 0];	// vx
-		h_particleData[vidx + 1]	= gVel[offset + 1];	// vy
-		h_particleData[vidx + 2] 	= gVel[offset + 2];	// vz
-		h_particleData[vidx + 3] 	= gVel[offset + 3];	// padding
+		hParticleData[idx + 0]		= gPos[offset + 0];	// x
+		hParticleData[idx + 1] 	= gPos[offset + 1];	// y
+		hParticleData[idx + 2] 	= gPos[offset + 2];	// z
+		hParticleData[idx + 3] 	= gPos[offset + 3];	// mass
+		hParticleData[vidx + 0] 	= gVel[offset + 0];	// vx
+		hParticleData[vidx + 1]	= gVel[offset + 1];	// vy
+		hParticleData[vidx + 2] 	= gVel[offset + 2];	// vz
+		hParticleData[vidx + 3] 	= gVel[offset + 3];	// padding
 		
 	}
 	
 	// copy initial value to GPU memory
-	CUDA_SAFE_CALL( cudaMemcpy(d_particleData, h_particleData,
-							   8 * bodies * sizeof(float), 
-							   cudaMemcpyHostToDevice) );
-}
-
-////////////////////////////////////////////////////////////////////////////////
-void reset(void)
-{
-   	// reset camera
-   	controller->cameraReset(scaleFactor);
-	
-	// reset dataset
-	CUDA_SAFE_CALL( cudaMemcpy(d_particleData, h_particleData,
-							   8 * numBodies * sizeof(float), 
-							   cudaMemcpyHostToDevice) );
+	cudaMemcpy(dParticleData, hParticleData, 8 * bodies * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,147 +146,112 @@ void runCuda(void)
 {
     // map OpenGL buffer object for writing from CUDA
     float4 *dptr;
-    CUDA_SAFE_CALL( cudaGLMapBufferObject( (void**)&dptr, gVBO) );
+    cudaGLMapBufferObject( (void**)&dptr, gVBO);
 
 	// only compute 1/16 at one time
 	gOffset = (gOffset+1) % (gApprx);
 	
     // execute the kernel
     // each block has 16x16 threads, grid 16xX: X will be decided by the # of bodies
-    cudaComputeGalaxy( dptr, (float4*)d_particleData, 256, numBodies / 256, 
+    cudaComputeGalaxy(dptr, (float4*) dParticleData, 256, numBodies / 256, 
     				   gStep, gApprx, gOffset);
 
     // unmap buffer object
-    CUDA_SAFE_CALL( cudaGLUnmapBufferObject( gVBO) );
+    cudaGLUnmapBufferObject( gVBO);
     
     
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Display function called in main loop
 void display(void)
 {
-    // update simulation
-    runCuda();
+	// Update simulation
+	runCuda();
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);  
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);  
 
-    // view transform
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+	// View transform
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
 
-    controller->updateCameraProperties();
-    float* camera_trans_lag = controller->getCameraTransLag();
-    float* camera_rot_lag = controller->getCameraRotLag();
+	controller->updateCameraProperties();
 
-    glTranslatef(camera_trans_lag[0], 
-		     camera_trans_lag[1], 
-		     camera_trans_lag[2]);
-    glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
-    glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+	float* cameraTransLag = controller->getCameraTransLag();
+	float* cameraRotLag = controller->getCameraRotLag();
+
+	glTranslatef(cameraTransLag[0], cameraTransLag[1], cameraTransLag[2]);
+	glRotatef(cameraRotLag[0], 1.0, 0.0, 0.0);
+	glRotatef(cameraRotLag[1], 0.0, 1.0, 0.0);
 	
-	// render bodies
-    renderer->setSpriteSize(gSpriteSize);
-    renderer->display();
+	// Render bodies
+	renderer->setSpriteSize(spriteSize);
+	renderer->display();
 	
-    // update frame rate
+	// update frame rate
 	framerateUpdate();
 	
-    glutSwapBuffers();
+	glutSwapBuffers();
 
-    glutReportErrors();
+	glutReportErrors();
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Reshape callback
 void reshape(int w, int h)
 {
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(60.0, (float) w / (float) h, 0.1, 100000.0);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(60.0, (float) w / (float) h, 0.1, 100000.0);
 
-    glMatrixMode(GL_MODELVIEW);
-    glViewport(0, 0, w, h);
-    
-    //
-    gSpriteSize *= (float)w / controller->getScreenWidth();
-    
-    //
-    controller->setScreenSize(w, h);
-    
-    
+	glMatrixMode(GL_MODELVIEW);
+	glViewport(0, 0, w, h);
+	
+	spriteSize *= (float) w / controller->getScreenWidth();
+	
+	controller->setScreenSize(w, h);
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Mouse pressed button callback
 void mouse(int button, int state, int x, int y)
 {
-    
-    int mods;
+	if (state == GLUT_DOWN)
+		controller->setButtonState(button + 1);
+	else if (state == GLUT_UP)
+		controller->setButtonState(0);
 
-    if (state == GLUT_DOWN)
-        controller->setButtonState(button + 1);
-    else if (state == GLUT_UP)
-        controller->setButtonState(0);
+	controller->setCameraOxOy(x, y);
 
-    mods = glutGetModifiers();
-    if (mods & GLUT_ACTIVE_SHIFT) 
-    {
-        //buttonState = 2;
-    } 
-    else if (mods & GLUT_ACTIVE_CTRL) 
-    {
-        //buttonState = 3;
-    }
-
-    controller->setCameraOxOy(x, y);
-
-    glutPostRedisplay();
-
+	glutPostRedisplay();
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Mouse motion when pressed button callback
 void motion(int x, int y)
 {
-    controller->cameraMotion(x, y);
+  controller->cameraMotion(x, y);
 	glutPostRedisplay();
-	
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Keyboard pressed key callback
 void key(unsigned char key, int x, int y)
 {
-
 	switch (key)
 	{
-	case '\033':
-    case 'q':
-        exit(0);
-        break;
-    case 'r':
-    	// reset configuration
-		reset();
-    	break;
-    case '=':
-    	// increase point size
-    	gSpriteSize += scaleFactor*0.02f;
-    	LIMIT(gSpriteSize, 0.1f, scaleFactor*2.0f);
-    	break;
-    case '-':
-    	// decrese point size
-    	gSpriteSize -= scaleFactor*0.02f;
-    	LIMIT(gSpriteSize, 0.1f, scaleFactor*2.0f);
-    	break;
-    }
-    
+		case '\033':
+		case 'q':
+				exit(0);
+				break;
+		case '=': // Increase sprite size
+			spriteSize += scaleFactor*0.02f;
+			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);
+			break;
+		case '-': // Decrease sprite size
+			spriteSize -= scaleFactor*0.02f;
+			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);
+			break;
+	}
 	glutPostRedisplay();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-void special(int key, int x, int y)
-{
-	
-	glutPostRedisplay();
-}
-
-////////////////////////////////////////////////////////////////////////////////
+// Idle callback, mandatory to update rendering
 void idle(void)
 {
 	glutPostRedisplay();
@@ -404,103 +320,45 @@ void loadData(char* filename, int bodies)
     	printf("cannot find file...: %s\n", filename);
     	exit(0);
     }
-	
-	//printf("bulge min,max: %f %f %f %f %f %f\n", mx, my, mz, Mx, My, Mz);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//! Create VBO
-////////////////////////////////////////////////////////////////////////////////
+// Creates the VBO and binds it to a CUDA resource
 void createVBO(GLuint* vbo)
 {
-    // create buffer object
-    glGenBuffers( 1, vbo);
-    glBindBuffer( GL_ARRAY_BUFFER, *vbo);
+	// Create vertex buffer object
+	glGenBuffers(1, vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
 
-    // initialize buffer object
-    unsigned int size = numBodies * 8 * sizeof( float); //4
-    glBufferData( GL_ARRAY_BUFFER, size, 0, GL_DYNAMIC_DRAW);
+	// Initialize vertex buffer object
+	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof( float), 0, GL_DYNAMIC_DRAW);
 
-    glBindBuffer( GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // register buffer object with CUDA
-    CUDA_SAFE_CALL( cudaGLRegisterBufferObject(*vbo) );
-
-    //CUT_CHECK_ERROR_GL();
+	// Register buffer object with CUDA
+	cudaGLRegisterBufferObject(*vbo);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//! Delete VBO
-////////////////////////////////////////////////////////////////////////////////
-void deleteVBO( GLuint* vbo)
+// Deletes the VBO and unbinds it from the CUDA resource
+void deleteVBO(GLuint* vbo)
 {
-    glBindBuffer( 1, *vbo);
-    glDeleteBuffers( 1, vbo);
+	glBindBuffer(1, *vbo);
+	glDeleteBuffers(1, vbo);
 
-    CUDA_SAFE_CALL( cudaGLUnregisterBufferObject(*vbo) );
+	cudaGLUnregisterBufferObject(*vbo);
 
-    *vbo = 0;
+	*vbo = 0;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+// ===========================
+// ===========================
 int main(int argc, char** argv)
 {
-
-    //CUT_DEVICE_INIT(argc, argv);
-
     // get number of SMs on this GPU
     int devID;
     cudaDeviceProp props;
-    CUDA_SAFE_CALL( cudaGetDevice(&devID) );
-    CUDA_SAFE_CALL( cudaGetDeviceProperties(&props, devID) );
-    
-    // Geforce 8600 (Macbook pro) profile
-	//Device 0: "GeForce 8600M GT"
-	//Major revision number:                         1
-	//Minor revision number:                         1
-	//Total amount of global memory:                 512 MB
-	//Number of multiprocessors:                     4
-	//Number of cores:                               32
-	//Total amount of constant memory:               64 KB
-	//Total amount of shared memory per block:       16 KB
-	//Total number of registers available per block: 8192
-	//Warp size:                                     32
-	//Maximum number of threads per block:           512
-	//Maximum sizes of each dimension of a block:    512 x 512 x 64
-	//Maximum sizes of each dimension of a grid:     65535 x 65535 x 1
-	//Maximum memory pitch:                          262144 bytes
-	//Texture alignment:                             256 bytes
-	//Clock rate:                                    0.75 GHz
-	//Concurrent copy and execution:                 Yes
+    cudaGetDevice(&devID);
+    cudaGetDeviceProperties(&props, devID);
 
-	// thread block size
-    int p = 256;	// width  (number of threads in col within block)
-    int q = 1;		// height (number of threads in row within block)
-	
-	// get total number of bodies
-    if (!cutGetCmdLineArgumenti(argc, (const char**) argv, "n", &numBodies))
-    	// default number of bodies is #SMs * 4 * CTA size
-    	//numBodies = p * q * 4 * props.multiProcessorCount;
-    	numBodies = 8192;
-
-	if (numBodies > 49152)
-	{
-		numBodies = 49152;
-		printf("maximun number of bodies is 49152.\n");
-	}
-		
-	// keep num of threads per block to 256
-    if (q * p > 256)
-    {
-        p = 256 / q;
-        printf("Setting p=%d, q=%d to maintain %d threads per block\n", p, q, 256);
-    }
-
-    if (q == 1 && numBodies < p)
-    {
-        p = numBodies;
-    }
 
 	// Data loading
 	if (numBodies % 4096 != 0)
@@ -510,7 +368,7 @@ int main(int argc, char** argv)
 	}
 	loadData("../../../data/dubinski.tab", numBodies);
 		
-	// OpenGL: create app window
+	// Create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
@@ -518,34 +376,33 @@ int main(int argc, char** argv)
 	sprintf(wtitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
 	glutCreateWindow(wtitle);
     
-    // GL setup	
+	// OpenGL setup	
 	initGL();
 	
 	// Initialize nbody system...	
     init(numBodies);
     
-    // GL callback function
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutMouseFunc(mouse);
-    glutMotionFunc(motion);
-    glutKeyboardFunc(key);
-    glutSpecialFunc(special);
-    glutIdleFunc(idle);
+	// GL callback functions
+	glutDisplayFunc(display);
+	glutReshapeFunc(reshape);
+	glutMouseFunc(mouse);
+	glutMotionFunc(motion);
+	glutKeyboardFunc(key);
+	glutIdleFunc(idle);
 
 	//
 	framerateTitle(wtitle);
 	
-	// let's start main loop
-    glutMainLoop();
+	// Start main loop
+  glutMainLoop();
 
 	deleteVBO((GLuint*)&gVBO);
 
 	// clean up memory stuff
-    if (gPos)
-        free(gPos);
-    if (gVel)
-        free(gVel);
+	if (gPos)
+			free(gPos);
+	if (gVel)
+			free(gVel);
 	
 	if (renderer)
 		delete renderer;
@@ -553,7 +410,3 @@ int main(int argc, char** argv)
     return 0;
 
 }
-
-
-
-
