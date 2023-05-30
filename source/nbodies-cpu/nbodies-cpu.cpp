@@ -58,27 +58,27 @@ void initGL()
 // ====================================
 void display()
 {
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // View transform
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
+	// View transform
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
 
-  controller->updateCameraProperties();
-  float* camera_trans_lag = controller->getCameraTransLag();
-  float* camera_rot_lag = controller->getCameraRotLag();
+	controller->updateCameraProperties();
+	float* camera_trans_lag = controller->getCameraTransLag();
+	float* camera_rot_lag = controller->getCameraRotLag();
 
-  glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
-  glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
-  glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+	glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
+	glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
+	glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
 
-  renderer->display();
+	renderer->display();
 
-  framerateUpdate();
+	framerateUpdate();
 
-  glutSwapBuffers();
+	glutSwapBuffers();
 
-  glutReportErrors();
+	glutReportErrors();
 }
 
 // Callback called when window is resized
@@ -144,7 +144,7 @@ int main(int argc, char** argv)
 	dataMasses = new float[numBodies];
 	loadData("../../../data/dubinski.tab", numBodies, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
-  // Create OpenGL app window
+	// Create OpenGL app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
@@ -152,7 +152,7 @@ int main(int argc, char** argv)
 	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
 	glutCreateWindow(windowTitle);
 
-  // GL setup
+	// GL setup
 	initGL();
 
 	// GL callback functions
