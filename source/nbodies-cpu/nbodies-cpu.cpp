@@ -18,15 +18,15 @@
 #include "simulation.h"
 
 // Number of particles to be rendered
-int 	numBodies = 16384;
+int numBodies = 16384;
 
 // Simulation parameters
 float scaleFactor = 1.5f;
 
 // Simulation data
-float3 *dataPositions;
-float3 *dataVelocities;
-float *dataMasses;
+float3 *dataPositions = nullptr;
+float3 *dataVelocities = nullptr;
+float *dataMasses = nullptr;
 
 ParticleRenderer* renderer = nullptr;
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
