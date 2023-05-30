@@ -1,6 +1,6 @@
-//
-// Created by major on 20-05-2023.
-//
+// =================================
+// Created by Cubolink on 20-05-2023
+// =================================
 
 #ifndef NBODIES_PROBLEM_DATA_LOADER_H
 #define NBODIES_PROBLEM_DATA_LOADER_H
@@ -24,31 +24,25 @@ void loadData(const char* filename, int bodies, float3 *positions, float3 *veloc
 
     std::string line;
     int i = 0;
-    bool end_file = false;
     while(i < bodies)
     {
         for (int j = 0; j < skip; j++)
-        {
-            if(!std::getline(fin, line, '\n'))
-                end_file = true;
-
-            if (end_file)
-                break;
-        }
-        if (end_file)
-            break;
+            if (!std::getline(fin, line, '\n')) return;
 
         std::stringstream ss(line);
         std::string item;
 
+        // Mass
+        std::getline(ss, item, ' ');
+        masses[i] = std::stof(item);
 
         // Position
         std::getline(ss, item, ' ');
-        positions[i].x = std::stof(item) * scaleFactor;
+        positions[i].x = std::stof(item);
         std::getline(ss, item, ' ');
-        positions[i].y = std::stof(item) * scaleFactor;
+        positions[i].y = std::stof(item);
         std::getline(ss, item, ' ');
-        positions[i].z = std::stof(item) * scaleFactor;
+        positions[i].z = std::stof(item);
 
         // Velocity
         std::getline(ss, item, ' ');
