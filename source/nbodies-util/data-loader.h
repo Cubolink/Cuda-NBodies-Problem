@@ -10,10 +10,13 @@
 #include <sstream>
 #include <string>
 
-#include "data-structs.h"
-
-void loadData(const char* filename, int bodies, float3 *positions, float3 *velocities, float *masses, float scaleFactor)
+void loadData(const char* filename, int bodies, float* positions, float* velocities, float* masses, float positionFactor)
 {
+    // Attributes factors
+    const float velocityFactor = 8.0f;
+    const float massFactor = 120000.0f;
+
+    // Particle skip
     int skip = 49152 / bodies;
 
     std::ifstream fin(filename);
@@ -34,23 +37,23 @@ void loadData(const char* filename, int bodies, float3 *positions, float3 *veloc
 
         // Mass
         std::getline(ss, item, ' ');
-        masses[i] = std::stof(item);
+        masses[i] = std::stof(item) * massFactor;
 
         // Position
         std::getline(ss, item, ' ');
-        positions[i].x = std::stof(item);
+        positions[3 * i] = std::stof(item) * positionFactor;
         std::getline(ss, item, ' ');
-        positions[i].y = std::stof(item);
+        positions[3 * i + 1] = std::stof(item) * positionFactor;
         std::getline(ss, item, ' ');
-        positions[i].z = std::stof(item);
+        positions[3 * i + 2] = std::stof(item) * positionFactor;
 
         // Velocity
         std::getline(ss, item, ' ');
-        velocities[i].x = std::stof(item);
+        velocities[3 * i] = std::stof(item) * velocityFactor;
         std::getline(ss, item, ' ');
-        velocities[i].y = std::stof(item);
+        velocities[3 * i + 1] = std::stof(item) * velocityFactor;
         std::getline(ss, item, ' ');
-        velocities[i].z = std::stof(item);
+        velocities[3 * i + 2] = std::stof(item) * velocityFactor;
 
         i++;
     }

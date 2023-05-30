@@ -21,28 +21,28 @@
 #include <cuda_gl_interop.h>
 
 #include "controller.h"
+#include "data-loader.h"
 #include "framerate.h"
 #include "particle-renderer.h"
 
 // Simulation parameters
-float 	scaleFactor = 1.5f;		// 10.0f, 50
-float 	velFactor = 8.0f;			// 15.0f, 100
-float	massFactor = 120000.0f;	// 50000000.0,
-float 	gStep = 0.001f;				// 0.005f
-int 	gOffset = 0;
-int 	gApprx = 4;
+float scaleFactor = 1.5f;
+float gStep = 0.001f;
+int gOffset = 0;
+int gApprx = 4;
 
 // Simulation data storage
-float* 	gPos = 0;
-float* 	gVel = 0;
+float* gPos = nullptr;
+float* gVel = nullptr;
+float* gMass = nullptr;
 GLuint	vbo = 0;				// 8 float (4 position, 4 color)
-float*	dParticleData = 0;		// device side particle data storage
-float*	hParticleData = 0;		// host side particle data storage
+float*	dParticleData = nullptr;		// device side particle data storage
+float*	hParticleData = nullptr;		// host side particle data storage
 
 // GL drawing attributes
-ParticleRenderer* renderer = 0;
+ParticleRenderer* renderer = nullptr;
 int 	numBodies = 16384;
-float	spriteSize = scaleFactor*0.25f;
+float	spriteSize = scaleFactor * 0.25f;
 
 // Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
@@ -54,7 +54,7 @@ int threadsPerBlock = 256;
 #define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
 
 // Forward declarations
-void init(int bodies);
+void initCUDA(int bodies);
 void initGL(void);
 void runCuda(void);
 void display(void);
@@ -63,7 +63,6 @@ void mouse(int button, int state, int x, int y);
 void motion(int x, int y);
 void key(unsigned char key, int x, int y);
 void idle(void);
-void loadData(char* filename, int bodies);
 void createVBO(GLuint* vbo);
 void deleteVBO(GLuint* vbo);
 
@@ -85,21 +84,24 @@ void initCUDA(int bodies)
 	{
 		// float array index
 		idx = i * 4;
-		vidx = bodies*4 + idx;
+		vidx = bodies * 4 + idx;
 		
 		if ((i % 2) == 0)
 			offset = idx;
 		else
 			offset = (idx + (bodies / 2)) % (bodies * 4);
+		
+		offset = (offset * 3) / 4;
+
 		// set value from global data storage
 		hParticleData[idx + 0]		= gPos[offset + 0];	// x
 		hParticleData[idx + 1] 	= gPos[offset + 1];	// y
 		hParticleData[idx + 2] 	= gPos[offset + 2];	// z
-		hParticleData[idx + 3] 	= gPos[offset + 3];	// mass
+		hParticleData[idx + 3] 	= gMass[offset / 3];	// mass
 		hParticleData[vidx + 0] 	= gVel[offset + 0];	// vx
 		hParticleData[vidx + 1]	= gVel[offset + 1];	// vy
 		hParticleData[vidx + 2] 	= gVel[offset + 2];	// vz
-		hParticleData[vidx + 3] 	= gVel[offset + 3];	// padding
+		hParticleData[vidx + 3] 	= 1.0f;	// padding
 		
 	}
 	
@@ -251,71 +253,6 @@ void idle(void)
 	glutPostRedisplay();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-#define MAXSTR 256
-float mx,my,mz,Mx,My,Mz;
-void loadData(char* filename, int bodies)
-{
-    int skip = 49152 / bodies;
-    //int skip = 81920 / bodies;
-    
-    FILE *fin;
-    
-    if ((fin = fopen(filename, "r")))
-    {
-    
-    	char buf[MAXSTR];
-    	float v[7];
-    	int idx = 0;
-    	
-    	// allocate memory
-    	gPos	= (float*)malloc(sizeof(float)*bodies*4);
-    	gVel	= (float*)malloc(sizeof(float)*bodies*4);
-    	 
-    	// total 81920 particles
-    	// 16384 Gal. Disk
-    	// 16384 And. Disk
-    	// 8192  Gal. bulge
-    	// 8192  And. bulge
-    	// 16384 Gal. halo
-    	// 16384 And. halo
-    	int k=0;
-    	for (int i=0; i< bodies; i++,k++)
-    	{
-    		// depend on input size...
-    		for (int j=0; j < skip; j++,k++)
-    			fgets (buf, MAXSTR, fin);	// lead line
-    		
-    		sscanf(buf, "%f %f %f %f %f %f %f", v+0, v+1, v+2, v+3, v+4, v+5, v+6);
-    		
-    		// update index
-    		idx = i * 4;
-    		
-    		// position
-    		gPos[idx+0] = v[1]*scaleFactor;
-    		gPos[idx+1] = v[2]*scaleFactor;
-    		gPos[idx+2] = v[3]*scaleFactor;
-    		
-    		// mass
-    		gPos[idx+3] = v[0]*massFactor;
-    		//gPos[idx+3] = 1.0f;
-    		//printf("mass : %f\n", gPos[idx+3]);
-    		
-    		// velocity
-    		gVel[idx+0] = v[4]*velFactor;
-    		gVel[idx+1] = v[5]*velFactor;
-    		gVel[idx+2] = v[6]*velFactor;
-    		gVel[idx+3] = 1.0f;
-    		
-    	}   
-    }
-    else
-    {
-    	printf("cannot find file...: %s\n", filename);
-    	exit(0);
-    }
-}
-
 // Creates the VBO and binds it to a CUDA resource
 void createVBO(GLuint* vbo)
 {
@@ -347,8 +284,11 @@ void deleteVBO(GLuint* vbo)
 // ===========================
 int main(int argc, char** argv)
 {
+	gPos = new float[numBodies * 3];
+	gVel = new float[numBodies * 3];
+	gMass = new float[numBodies];
 	// Data loading
-	loadData("../../../data/dubinski.tab", numBodies);
+	loadData("../../../data/dubinski.tab", numBodies, gPos, gVel, gMass, scaleFactor);
 		
 	// Create app window
 	glutInit(&argc, argv);
