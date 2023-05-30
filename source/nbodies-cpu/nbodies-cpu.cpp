@@ -17,7 +17,7 @@
 #include "particle-renderer.h"
 #include "simulation.h"
 
-ParticleRenderer* renderer = nullptr;
+// Number of particles to be rendered
 int 	numBodies = 16384;
 
 // Simulation parameters
@@ -28,8 +28,8 @@ float3 *dataPositions;
 float3 *dataVelocities;
 float *dataMasses;
 
+ParticleRenderer* renderer = nullptr;
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
-
 
 void initGL()
 {
@@ -53,7 +53,9 @@ void initGL()
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
 
-
+// ====================================
+//          Main loop callback         
+// ====================================
 void display()
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -79,6 +81,7 @@ void display()
   glutReportErrors();
 }
 
+// Callback called when window is resized
 void reshape(int w, int h)
 {
 	glMatrixMode(GL_PROJECTION);
@@ -91,24 +94,27 @@ void reshape(int w, int h)
 	controller->setScreenSize(w, h);
 }
 
+// Called when mouse button is pressed
 void mouse(int button, int state, int x, int y)
 {
 	if (state == GLUT_DOWN)
-			controller->setButtonState(button + 1);
+		controller->setButtonState(button + 1);
 	else if (state == GLUT_UP)
-			controller->setButtonState(0);
+		controller->setButtonState(0);
 
 	controller->setCameraOxOy(x, y);
 
 	glutPostRedisplay();
 }
 
+// Called when moving mouse while mouse button is pressed
 void motion(int x, int y)
 {
 	controller->cameraMotion(x, y);
 	glutPostRedisplay();
 }
 
+// Called when keyboard key is pressed
 void key(unsigned char key, int x, int y)
 {
 	switch (key)
@@ -118,15 +124,18 @@ void key(unsigned char key, int x, int y)
 			exit(0);
 			break;
 	}
-
 	glutPostRedisplay();
 }
 
+// Called in order for animations to work 
 void idle()
 {
 	glutPostRedisplay();
 }
 
+// ======================
+//          Main 
+// ======================
 int main(int argc, char** argv)
 {
 	// Data loading
@@ -139,9 +148,9 @@ int main(int argc, char** argv)
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
-	char wtitle[256];
-	sprintf(wtitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
-	glutCreateWindow(wtitle);
+	char windowTitle[256];
+	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
+	glutCreateWindow(windowTitle);
 
   // GL setup
 	initGL();
