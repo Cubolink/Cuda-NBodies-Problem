@@ -10,12 +10,11 @@
 #include <cstdlib>
 #include <cstdio>
 
-#include "simulation.h"
-#include "data-loader.h"
-
-#include "ParticleRenderer.h"
-#include "framerate.h"
 #include "controller.h"
+#include "data-loader.h"
+#include "framerate.h"
+#include "particle-renderer.h"
+#include "simulation.h"
 
 ParticleRenderer* renderer = nullptr;
 int 	numBodies = 16384;
@@ -47,7 +46,7 @@ void initGL()
   glEnable(GL_DEPTH_TEST);
   glClearColor(0.0, 0.0, 0.0, 1.0);
 
-// particle renderer
+	// Particle renderer
   renderer = new ParticleRenderer(numBodies);
   renderer->setPos((float*) dataPositions);
   renderer->setSpriteSize(0.4f);

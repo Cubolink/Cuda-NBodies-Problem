@@ -12,11 +12,11 @@ public:
     ParticleRenderer(int nParticles);
     ~ParticleRenderer();
     
-    void setVBO(unsigned int vbo, int numParticles);
-	  void setShaders(const char* vert, const char* frag);
+	void setShaders(const char* vert, const char* frag);
 
     void display();
 
+    void setVBO(unsigned int vbo) { m_vbo = vbo; }
     void setPos(float *pos) { m_pos = pos; }
     void setSpriteSize(float size) { m_spriteSize = size; }
 

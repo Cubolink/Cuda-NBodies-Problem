@@ -20,9 +20,9 @@
 #include <cuda_runtime_api.h>
 #include <cuda_gl_interop.h>
 
-#include "ParticleRenderer.h"
-#include "framerate.h"
 #include "controller.h"
+#include "framerate.h"
+#include "particle-renderer.h"
 
 // Simulation parameters
 float 	scaleFactor = 1.5f;		// 10.0f, 50
@@ -35,7 +35,7 @@ int 	gApprx = 4;
 // Simulation data storage
 float* 	gPos = 0;
 float* 	gVel = 0;
-GLuint	gVBO = 0;				// 8 float (4 position, 4 color)
+GLuint	vbo = 0;				// 8 float (4 position, 4 color)
 float*	dParticleData = 0;		// device side particle data storage
 float*	hParticleData = 0;		// host side particle data storage
 
@@ -64,15 +64,12 @@ void motion(int x, int y);
 void key(unsigned char key, int x, int y);
 void idle(void);
 void loadData(char* filename, int bodies);
-void createVBO( GLuint* vbo);
-void deleteVBO( GLuint* vbo);
+void createVBO(GLuint* vbo);
+void deleteVBO(GLuint* vbo);
 
-////////////////////////////////////////////////////////////////////////////////
-void init(int bodies)
+// Initialize CUDA data
+void initCUDA(int bodies)
 {
-	// Blocks per grid
-	int numBlocks = bodies / threadsPerBlock;
-	
 	// Host particle data (position, velocity)
 	hParticleData = (float *) malloc (8 * bodies * sizeof(float));
 	
@@ -110,29 +107,28 @@ void init(int bodies)
 	cudaMemcpy(dParticleData, hParticleData, 8 * bodies * sizeof(float), cudaMemcpyHostToDevice);
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// Initializes OpenGL
 void initGL(void)
 {
-    glewInit();
-    if (!glewIsSupported("GL_VERSION_2_0 "
-                         "GL_VERSION_1_5 "
-			             "GL_ARB_multitexture "
-                         "GL_ARB_vertex_buffer_object")) 
-    {
-        fprintf(stderr, "Required OpenGL extensions missing.");
-        exit(-1);
-    }
+	glewInit();
+	if (!glewIsSupported("GL_VERSION_2_0 "
+												"GL_VERSION_1_5 "
+												"GL_ARB_multitexture "
+												"GL_ARB_vertex_buffer_object")) 
+	{
+		fprintf(stderr, "Required OpenGL extensions missing.");
+		exit(-1);
+	}
 
-    glEnable(GL_DEPTH_TEST);
-    glClearColor(0.0, 0.0, 0.0, 1.0);
-	
-	// particle renderer
-    renderer = new ParticleRenderer(numBodies);
-    createVBO((GLuint*)&gVBO);
-    renderer->setVBO(gVBO, numBodies);
-    renderer->setSpriteSize(0.4f);
-    renderer->setShaders("../../../data/sprite.vert",
-    					 "../../../data/sprite.frag");
+	glEnable(GL_DEPTH_TEST);
+	glClearColor(0.0, 0.0, 0.0, 1.0);
+
+	// Particle renderer initialization
+	createVBO((GLuint*) &vbo);
+	renderer = new ParticleRenderer(numBodies);
+	renderer->setVBO(vbo);
+	renderer->setSpriteSize(0.4f);
+	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,22 +140,20 @@ void cudaComputeGalaxy(float4* pos, float4 * pdata, int width, int height,
 ////////////////////////////////////////////////////////////////////////////////
 void runCuda(void)
 {
-    // map OpenGL buffer object for writing from CUDA
-    float4 *dptr;
-    cudaGLMapBufferObject( (void**)&dptr, gVBO);
+	// Map OpenGL vertex buffer object for writing from CUDA
+	float4 *dptr;
+	cudaGLMapBufferObject((void**) &dptr, vbo);
 
 	// only compute 1/16 at one time
 	gOffset = (gOffset+1) % (gApprx);
-	
-    // execute the kernel
-    // each block has 16x16 threads, grid 16xX: X will be decided by the # of bodies
-    cudaComputeGalaxy(dptr, (float4*) dParticleData, 256, numBodies / 256, 
-    				   gStep, gApprx, gOffset);
 
-    // unmap buffer object
-    cudaGLUnmapBufferObject( gVBO);
-    
-    
+	// execute the kernel
+	// each block has 16x16 threads, grid 16xX: X will be decided by the # of bodies
+	cudaComputeGalaxy(dptr, (float4*) dParticleData, 256, numBodies / 256, 
+							gStep, gApprx, gOffset);
+
+	// Unmap vertex buffer object
+	cudaGLUnmapBufferObject(vbo);
 }
 
 // Display function called in main loop
@@ -187,7 +181,7 @@ void display(void)
 	renderer->setSpriteSize(spriteSize);
 	renderer->display();
 	
-	// update frame rate
+	// Update FPS
 	framerateUpdate();
 	
 	glutSwapBuffers();
@@ -330,7 +324,7 @@ void createVBO(GLuint* vbo)
 	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
 
 	// Initialize vertex buffer object
-	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof( float), 0, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -353,34 +347,22 @@ void deleteVBO(GLuint* vbo)
 // ===========================
 int main(int argc, char** argv)
 {
-    // get number of SMs on this GPU
-    int devID;
-    cudaDeviceProp props;
-    cudaGetDevice(&devID);
-    cudaGetDeviceProperties(&props, devID);
-
-
 	// Data loading
-	if (numBodies % 4096 != 0)
-	{
-		printf("number of body must be mulples of 4096\n");
-		exit(0);
-	}
 	loadData("../../../data/dubinski.tab", numBodies);
 		
 	// Create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
-	char wtitle[256];
-	sprintf(wtitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
-	glutCreateWindow(wtitle);
+	char windowTitle[256];
+	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
+	glutCreateWindow(windowTitle);
     
 	// OpenGL setup	
 	initGL();
 	
-	// Initialize nbody system...	
-    init(numBodies);
+	// CUDA setup
+  initCUDA(numBodies);
     
 	// GL callback functions
 	glutDisplayFunc(display);
@@ -390,15 +372,14 @@ int main(int argc, char** argv)
 	glutKeyboardFunc(key);
 	glutIdleFunc(idle);
 
-	//
-	framerateTitle(wtitle);
+	// FPS on title
+	framerateTitle(windowTitle);
 	
 	// Start main loop
   glutMainLoop();
 
-	deleteVBO((GLuint*)&gVBO);
+	deleteVBO((GLuint*) &vbo);
 
-	// clean up memory stuff
 	if (gPos)
 			free(gPos);
 	if (gVel)

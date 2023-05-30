@@ -4,7 +4,7 @@
  */
 
 
-#include "ParticleRenderer.h"
+#include "particle-renderer.h"
 #include <GL/glew.h>
 #include <stdio.h>
 
@@ -153,12 +153,6 @@ ParticleRenderer::~ParticleRenderer()
 		free(m_pos);
 		m_pos = nullptr;
 	}
-}
-
-void ParticleRenderer::setVBO(unsigned int vbo, int numParticles)
-{
-	m_vbo = vbo;
-	m_numParticles = numParticles;
 }
 
 void ParticleRenderer::setShaders(const char* vert, const char* frag) 

@@ -1,6 +1,6 @@
-//
-// Created by Cubolink on 27-05-2023.
-//
+// =================================
+// Created by Cubolink on 27-05-2023
+// =================================
 
 #ifndef NBODIES_PROBLEM_CONTROLLER_H
 #define NBODIES_PROBLEM_CONTROLLER_H
@@ -55,7 +55,6 @@ public:
     void setButtonState(int newState)
     {
         buttonState = newState;
-        camera->printPosition();
     }
 
     void setScreenSize(int newSw, int newSh)
