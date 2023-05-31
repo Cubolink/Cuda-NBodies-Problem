@@ -1,6 +1,6 @@
-//
-// Created by major on 20-05-2023.
-//
+// =================================
+// Created by Cubelink on 20-05-2023
+// =================================
 
 #ifndef NBODIES_PROBLEM_SIMULATION_H
 #define NBODIES_PROBLEM_SIMULATION_H
@@ -10,16 +10,14 @@
 #include "data-structs.h"
 #include <GL/glew.h>
 
-float3 bodyBodyInteraction(float3 i_body, float3 j_body, float3 ai)
+float3 bodyBodyInteraction(float3 iBody, float3 jBody, float3 ai)
 {
     float3 r{};
-    r.x = j_body.x - i_body.x;
-    r.y = j_body.y - i_body.y;
-    r.z = j_body.z - i_body.z;
+    r.x = jBody.x - iBody.x;
+    r.y = jBody.y - iBody.y;
+    r.z = jBody.z - iBody.z;
 
-    float distSqr = r.x*r.x + r.y*r.y + r.z*r.z;
-    // soft the distSqr here?
-
+    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z;
     float dist = sqrt(distSqr);
     float distCube = distSqr * dist;
 
@@ -32,37 +30,36 @@ float3 bodyBodyInteraction(float3 i_body, float3 j_body, float3 ai)
     return ai;
 }
 
-void galaxyKernel(int i, float3 *pdata, int nBodies)
+void nBodiesKernel(int i, float3 *particlesData, int nBodies)
 {
     float dt = 0.001;
-    // index of my body
-    unsigned int pLoc = i;
-    unsigned int vLoc = nBodies + pLoc;  // after all positions, it stores velocities
 
-    float3 myPosition = pdata[pLoc];
-    float3 myVelocity = pdata[vLoc];
+    unsigned int pIdx = i;
+    unsigned int vIdx = nBodies + pIdx;  // After all positions, it stores velocities
 
-    float3 acc = {.0f, .0f, .0f};
+    float3 position = particlesData[pIdx];
+    float3 velocity = particlesData[vIdx];
 
-    unsigned int idx = 0;
+    float3 acceleration = {.0f, .0f, .0f};
+
     for (int j = 0; j < nBodies; j++)
     {
-        acc = bodyBodyInteraction(myPosition, pdata[j], acc);
+        acceleration = bodyBodyInteraction(position, particlesData[j], acceleration);
     }
 
-    // update velocity with above acc
-    myVelocity.x += acc.x * dt;
-    myVelocity.y += acc.y * dt;
-    myVelocity.z += acc.z * dt;
+    // Update velocity
+    velocity.x += acceleration.x * dt;
+    velocity.y += acceleration.y * dt;
+    velocity.z += acceleration.z * dt;
 
-    // update position
-    myPosition.x += myVelocity.x * dt;
-    myPosition.y += myVelocity.y * dt;
-    myPosition.z += myVelocity.z * dt;
+    // Update position
+    position.x += velocity.x * dt;
+    position.y += velocity.y * dt;
+    position.z += velocity.z * dt;
 
-    // update pdata
-    pdata[pLoc] = myPosition;
-    pdata[vLoc] = myVelocity;
+    // Update particles data
+    particlesData[pIdx] = position;
+    particlesData[vIdx] = velocity;
 }
 
 /**
@@ -70,35 +67,38 @@ void galaxyKernel(int i, float3 *pdata, int nBodies)
  * @param pdata
  * @param nBodies
  */
-void cpuComputeGalaxy(float3 *pdata, int nBodies, GLuint vbo)
+void cpuComputeNBodies(float3 *particlesData, GLuint vbo, int nBodies)
 {
     /*
     // For each body, updates its position and velocity
     for (int i = 0; i < nBodies; i++) {
         std::cout << i << "/" << nBodies << std::endl;
-        galaxyKernel(i, pdata, nBodies);
+        nBodiesKernel(i, pdata, nBodies);
     }
      */
 
-    auto aux = new float[2 * nBodies * 4];
-    for (int i = 0; i < nBodies; i++) {
-        int pIdx = 4 * i;
+    // New VBO data
+    auto vboData = new float[nBodies * 8];
+
+    for (int i = 0; i < nBodies; i++)
+    {
+        int pIdx = i * 4;
         int vIdx = pIdx + nBodies * 4;
 
-        aux[pIdx] = pdata[i].x;
-        aux[pIdx + 1] = pdata[i].y;
-        aux[pIdx + 2] = pdata[i].z;
-        aux[pIdx + 3] = 1.f;
+        vboData[pIdx] = particlesData[i].x;
+        vboData[pIdx + 1] = particlesData[i].y;
+        vboData[pIdx + 2] = particlesData[i].z;
+        vboData[pIdx + 3] = 1.f;
 
-        aux[vIdx] = pdata[nBodies + i].x;
-        aux[vIdx + 1] = pdata[nBodies + i].y;
-        aux[vIdx + 2] = pdata[nBodies + i].z;
-        aux[vIdx + 3] = 1.f;
+        vboData[vIdx] = particlesData[nBodies + i].x;
+        vboData[vIdx + 1] = particlesData[nBodies + i].y;
+        vboData[vIdx + 2] = particlesData[nBodies + i].z;
+        vboData[vIdx + 3] = 1.f;
     }
-    std::cout << "updated aux" << std::endl;
 
+    // Update the VBO data
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, (long long) (nBodies * 8 * sizeof(float)), aux);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, nBodies * 8 * sizeof(float), vboData);
 }
 
 

@@ -18,18 +18,18 @@
 #include "simulation.h"
 
 // Number of particles to be rendered
-#define NUM_BODIES 16384
+#define NUM_BODIES 4096
 
 // Simulation parameters
 float scaleFactor = 1.5f;
 
 // Simulation data
-float3 *pPosVel = nullptr;
+float3 *dataPosVel = nullptr;
 float3 *dataPositions = nullptr;
 float3 *dataVelocities = nullptr;
 float *dataMasses = nullptr;
 
-GLuint	VBO = 0;
+GLuint VBO = 0;
 ParticleRenderer* renderer = nullptr;
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
@@ -71,10 +71,9 @@ void initGL()
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	// Particle renderer
-    createVBO((GLuint*) &VBO);
+  createVBO((GLuint*) &VBO);
 	renderer = new ParticleRenderer(NUM_BODIES);
-	//renderer->setPos((float*) dataPositions);
-    renderer->setVBO(VBO);
+  renderer->setVBO(VBO);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
@@ -149,11 +148,11 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 			exit(0);
 			break;
-        case 's':
-            cpuComputeGalaxy(pPosVel, NUM_BODIES, VBO);
-            break;
-        default:
-            break;
+		case 's':
+				cpuComputeNBodies(dataPosVel, VBO, NUM_BODIES);
+				break;
+		default:
+				break;
 	}
 	glutPostRedisplay();
 }
@@ -170,9 +169,9 @@ void idle()
 int main(int argc, char** argv)
 {
 	// Data loading
-    pPosVel = new float3[NUM_BODIES*2];  // [pos... velocities]
-	dataPositions = pPosVel;
-	dataVelocities = pPosVel + NUM_BODIES;
+  dataPosVel = new float3[NUM_BODIES * 2];  // [positions... velocities]
+	dataPositions = dataPosVel;
+	dataVelocities = dataPosVel + NUM_BODIES;
 	dataMasses = new float[NUM_BODIES];
 	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
