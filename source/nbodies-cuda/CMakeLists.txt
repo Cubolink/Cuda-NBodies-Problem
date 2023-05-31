@@ -3,7 +3,7 @@ find_package(CUDA QUIET)
 
 # Configure CUDA CPP project if CUDA is found
 if(CUDA_FOUND)
-  add_executable(nbodies-cuda nbodies-cuda.cpp nbodies-kernel.cu)
+  add_executable(nbodies-cuda nbodies-cuda.cu)
 
   target_include_directories(nbodies-cuda PUBLIC
     "${PROJECT_SOURCE_DIR}/include"

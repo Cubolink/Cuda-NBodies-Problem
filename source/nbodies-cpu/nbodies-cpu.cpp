@@ -18,7 +18,7 @@
 #include "simulation.h"
 
 // Number of particles to be rendered
-int numBodies = 16384;
+#define NUM_BODIES 16384
 
 // Simulation parameters
 float scaleFactor = 1.5f;
@@ -47,7 +47,7 @@ void initGL()
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	// Particle renderer
-	renderer = new ParticleRenderer(numBodies);
+	renderer = new ParticleRenderer(NUM_BODIES);
 	renderer->setPos((float*) dataPositions);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
@@ -139,17 +139,17 @@ void idle()
 int main(int argc, char** argv)
 {
 	// Data loading
-	dataPositions = new float3[numBodies];
-	dataVelocities = new float3[numBodies];
-	dataMasses = new float[numBodies];
-	loadData("../../../data/dubinski.tab", numBodies, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
+	dataPositions = new float3[NUM_BODIES];
+	dataVelocities = new float3[NUM_BODIES];
+	dataMasses = new float[NUM_BODIES];
+	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
 	// Create OpenGL app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
 	char windowTitle[256];
-	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
+	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", NUM_BODIES); 
 	glutCreateWindow(windowTitle);
 
 	// GL setup

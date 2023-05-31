@@ -25,6 +25,9 @@
 #include "framerate.h"
 #include "particle-renderer.h"
 
+// Number of particles to be rendered
+#define NUM_BODIES 16384
+
 // Simulation parameters
 float scaleFactor = 1.5f;
 float gStep = 0.001f;
@@ -41,7 +44,6 @@ float*	hParticleData = nullptr;		// host side particle data storage
 
 // GL drawing attributes
 ParticleRenderer* renderer = nullptr;
-int 	numBodies = 16384;
 float	spriteSize = scaleFactor * 0.25f;
 
 // Controller
@@ -127,36 +129,52 @@ void initGL(void)
 
 	// Particle renderer initialization
 	createVBO((GLuint*) &vbo);
-	renderer = new ParticleRenderer(numBodies);
+	renderer = new ParticleRenderer(NUM_BODIES);
 	renderer->setVBO(vbo);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// CUDA kernel interface
-extern "C" 
-void cudaComputeGalaxy(float4* pos, float4 * pdata, int width, int height, 
-					   float step, int apprx, int offset);
+// ========================================================================
+// Start CUDA loop code
+// ========================================================================
 
-////////////////////////////////////////////////////////////////////////////////
+__global__ void nBodiesKernel(float4* pvbo, float4* pdata)
+{	
+	// Index of my body	
+	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	int positionIndex = i;
+	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
+		
+	float4 position = pdata[positionIndex];
+
+	// Update VBO
+	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
+	pvbo[velocityIndex] = pdata[velocityIndex];
+}
+
 void runCuda(void)
 {
 	// Map OpenGL vertex buffer object for writing from CUDA
 	float4 *dptr;
 	cudaGLMapBufferObject((void**) &dptr, vbo);
 
-	// only compute 1/16 at one time
-	gOffset = (gOffset+1) % (gApprx);
+	int blockSize = 256; // Blocks of size 16 x 16
 
-	// execute the kernel
-	// each block has 16x16 threads, grid 16xX: X will be decided by the # of bodies
-	cudaComputeGalaxy(dptr, (float4*) dParticleData, 256, numBodies / 256, 
-							gStep, gApprx, gOffset);
+  // Round up in case N is not a multiple of blockSize
+  int numBlocks = (NUM_BODIES + blockSize - 1) / blockSize;
+
+	// Run the kernel
+	nBodiesKernel<<<numBlocks, blockSize>>>(dptr, (float4*) dParticleData);
 
 	// Unmap vertex buffer object
 	cudaGLUnmapBufferObject(vbo);
 }
+
+// ========================================================================
+// End CUDA loop code
+// ========================================================================
 
 // Display function called in main loop
 void display(void)
@@ -261,7 +279,7 @@ void createVBO(GLuint* vbo)
 	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
 
 	// Initialize vertex buffer object
-	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, NUM_BODIES * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -280,29 +298,30 @@ void deleteVBO(GLuint* vbo)
 	*vbo = 0;
 }
 
-// ===========================
-// ===========================
+// ======================
+//          Main         
+// ======================
 int main(int argc, char** argv)
 {
-	gPos = new float[numBodies * 3];
-	gVel = new float[numBodies * 3];
-	gMass = new float[numBodies];
+	gPos = new float[NUM_BODIES * 3];
+	gVel = new float[NUM_BODIES * 3];
+	gMass = new float[NUM_BODIES];
 	// Data loading
-	loadData("../../../data/dubinski.tab", numBodies, gPos, gVel, gMass, scaleFactor);
+	loadData("../../../data/dubinski.tab", NUM_BODIES, gPos, gVel, gMass, scaleFactor);
 		
 	// Create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
 	char windowTitle[256];
-	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", numBodies); 
+	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", NUM_BODIES); 
 	glutCreateWindow(windowTitle);
     
 	// OpenGL setup	
 	initGL();
 	
 	// CUDA setup
-  initCUDA(numBodies);
+  initCUDA(NUM_BODIES);
     
 	// GL callback functions
 	glutDisplayFunc(display);
