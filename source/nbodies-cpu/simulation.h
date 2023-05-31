@@ -83,23 +83,16 @@ void cpuComputeGalaxy(float3 *pdata, int nBodies, GLuint vbo)
     auto aux = new float[2 * nBodies * 4];
     for (int i = 0; i < nBodies; i++) {
         int pIdx = 4 * i;
-        int vIdx = pIdx + nBodies;
-        int offset;
+        int vIdx = pIdx + nBodies * 4;
 
-        if (i % 2)
-            offset = (pIdx + (nBodies / 2)) % (nBodies * 4);
-        else
-            offset = pIdx;
-        offset /= 4;
-
-        aux[pIdx] = pdata[offset].x;
-        aux[pIdx + 1] = pdata[offset].y;
-        aux[pIdx + 2] = pdata[offset].z;
+        aux[pIdx] = pdata[i].x;
+        aux[pIdx + 1] = pdata[i].y;
+        aux[pIdx + 2] = pdata[i].z;
         aux[pIdx + 3] = 1.f;
 
-        aux[vIdx] = pdata[nBodies + offset].x;
-        aux[vIdx + 1] = pdata[nBodies + offset].y;
-        aux[vIdx + 2] = pdata[nBodies + offset].z;
+        aux[vIdx] = pdata[nBodies + i].x;
+        aux[vIdx + 1] = pdata[nBodies + i].y;
+        aux[vIdx + 2] = pdata[nBodies + i].z;
         aux[vIdx + 3] = 1.f;
     }
     std::cout << "updated aux" << std::endl;
