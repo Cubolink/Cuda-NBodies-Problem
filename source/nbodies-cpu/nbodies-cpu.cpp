@@ -24,12 +24,36 @@
 float scaleFactor = 1.5f;
 
 // Simulation data
+float3 *pPosVel = nullptr;
 float3 *dataPositions = nullptr;
 float3 *dataVelocities = nullptr;
 float *dataMasses = nullptr;
 
+GLuint	VBO = 0;
 ParticleRenderer* renderer = nullptr;
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
+
+// Creates the VBO and binds it to a CUDA resource
+void createVBO(GLuint* vbo)
+{
+    // Create vertex buffer object
+    glGenBuffers(1, vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+
+    // Initialize vertex buffer object
+    glBufferData(GL_ARRAY_BUFFER, NUM_BODIES * 8 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+// Deletes the VBO and unbinds it from the CUDA resource
+void deleteVBO(GLuint* vbo)
+{
+    glBindBuffer(1, *vbo);
+    glDeleteBuffers(1, vbo);
+
+    *vbo = 0;
+}
 
 void initGL()
 {
@@ -47,8 +71,10 @@ void initGL()
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	// Particle renderer
+    createVBO((GLuint*) &VBO);
 	renderer = new ParticleRenderer(NUM_BODIES);
-	renderer->setPos((float*) dataPositions);
+	//renderer->setPos((float*) dataPositions);
+    renderer->setVBO(VBO);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
@@ -123,6 +149,11 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 			exit(0);
 			break;
+        case 's':
+            cpuComputeGalaxy(pPosVel, NUM_BODIES, VBO);
+            break;
+        default:
+            break;
 	}
 	glutPostRedisplay();
 }
@@ -139,8 +170,9 @@ void idle()
 int main(int argc, char** argv)
 {
 	// Data loading
-	dataPositions = new float3[NUM_BODIES];
-	dataVelocities = new float3[NUM_BODIES];
+    pPosVel = new float3[NUM_BODIES*2];  // [pos... velocities]
+	dataPositions = pPosVel;
+	dataVelocities = pPosVel + NUM_BODIES;
 	dataMasses = new float[NUM_BODIES];
 	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 

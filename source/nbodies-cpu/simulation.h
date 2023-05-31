@@ -5,12 +5,14 @@
 #ifndef NBODIES_PROBLEM_SIMULATION_H
 #define NBODIES_PROBLEM_SIMULATION_H
 
+#include <iostream>
 #include <cmath>
 #include "data-structs.h"
+#include <GL/glew.h>
 
 float3 bodyBodyInteraction(float3 i_body, float3 j_body, float3 ai)
 {
-    float3 r;
+    float3 r{};
     r.x = j_body.x - i_body.x;
     r.y = j_body.y - i_body.y;
     r.z = j_body.z - i_body.z;
@@ -30,25 +32,12 @@ float3 bodyBodyInteraction(float3 i_body, float3 j_body, float3 ai)
     return ai;
 }
 
-float3 tile_calculation(float3 myPosition, float3 *pdata, float3 acc)
+void galaxyKernel(int i, float3 *pdata, int nBodies)
 {
-    for (unsigned int i = 0; i < 1; i++)
-    {
-        acc = bodyBodyInteraction(myPosition, pdata[i], acc);
-    }
-
-    return acc;
-}
-
-void galaxyKernel(int x, int y, float3 *pos, float3 *pdata, unsigned int width,
-                  unsigned int height, float step, int apprx, int offset)
-{
+    float dt = 0.001;
     // index of my body
-    unsigned int pLoc = y * width + x;
-    unsigned int vLoc = width * height + pLoc;  // until width * height stores position, then stores velocities
-
-    // starting index of the position array
-    unsigned  int start = ((width * height) / apprx) * offset;
+    unsigned int pLoc = i;
+    unsigned int vLoc = nBodies + pLoc;  // after all positions, it stores velocities
 
     float3 myPosition = pdata[pLoc];
     float3 myVelocity = pdata[vLoc];
@@ -56,38 +45,67 @@ void galaxyKernel(int x, int y, float3 *pos, float3 *pdata, unsigned int width,
     float3 acc = {.0f, .0f, .0f};
 
     unsigned int idx = 0;
-    unsigned int loop = ((width * height) / apprx);
-    for (int i = 0; i < loop; i++)
+    for (int j = 0; j < nBodies; j++)
     {
-        acc = tile_calculation(myPosition, pdata, acc);
+        acc = bodyBodyInteraction(myPosition, pdata[j], acc);
     }
 
     // update velocity with above acc
-    myVelocity.x += acc.x * step;
-    myVelocity.y += acc.y * step;
-    myVelocity.z += acc.z * step;
+    myVelocity.x += acc.x * dt;
+    myVelocity.y += acc.y * dt;
+    myVelocity.z += acc.z * dt;
 
     // update position
-    myPosition.x += myVelocity.x * step;
-    myPosition.y += myVelocity.y * step;
-    myPosition.z += myVelocity.z * step;
+    myPosition.x += myVelocity.x * dt;
+    myPosition.y += myVelocity.y * dt;
+    myPosition.z += myVelocity.z * dt;
 
     // update pdata
     pdata[pLoc] = myPosition;
     pdata[vLoc] = myVelocity;
 }
 
-void cpuComputeGalaxy(float3 *pos, float3 *pdata, int width, int height,
-                      float step, int apprx, int offset)
+/**
+ * Updates positions and velocities of all bodies
+ * @param pdata
+ * @param nBodies
+ */
+void cpuComputeGalaxy(float3 *pdata, int nBodies, GLuint vbo)
 {
-    // Here we could split in threads, each one running galaxyKernel
-    // But we want CPU to use one thread, so:
-    for (int i = 0; i < height; i++)
-        for (int j = 0; j < width; j++)
-            // loc = i * width + j;
-            // (i x j) matrix means i are rows, j are columns => i is vertical , j is horizontal
-            // therefore y = i, x = j
-            galaxyKernel(j, i, pos, pdata, width, height, step, apprx, offset);
+    /*
+    // For each body, updates its position and velocity
+    for (int i = 0; i < nBodies; i++) {
+        std::cout << i << "/" << nBodies << std::endl;
+        galaxyKernel(i, pdata, nBodies);
+    }
+     */
+
+    auto aux = new float[2 * nBodies * 4];
+    for (int i = 0; i < nBodies; i++) {
+        int pIdx = 4 * i;
+        int vIdx = pIdx + nBodies;
+        int offset;
+
+        if (i % 2)
+            offset = (pIdx + (nBodies / 2)) % (nBodies * 4);
+        else
+            offset = pIdx;
+        offset /= 4;
+
+        aux[pIdx] = pdata[offset].x;
+        aux[pIdx + 1] = pdata[offset].y;
+        aux[pIdx + 2] = pdata[offset].z;
+        aux[pIdx + 3] = 1.f;
+
+        aux[vIdx] = pdata[nBodies + offset].x;
+        aux[vIdx + 1] = pdata[nBodies + offset].y;
+        aux[vIdx + 2] = pdata[nBodies + offset].z;
+        aux[vIdx + 3] = 1.f;
+    }
+    std::cout << "updated aux" << std::endl;
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, (long long) (nBodies * 8 * sizeof(float)), aux);
 }
 
 
