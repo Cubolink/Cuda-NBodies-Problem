@@ -12,7 +12,7 @@ else()
   set(USE_CUDA OFF)
 endif()
 
-set(PARTICLE_RENDERER_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/source/particle-renderer")
-set(PARTICLE_RENDERER_LIBRARY particle-renderer)
+set(NBODIES_UTIL_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/source/nbodies-util")
+set(NBODIES_UTIL_LIBRARY nbodies-util)
 
 add_subdirectory(source)

@@ -1,11 +1,12 @@
-//
-// Created by Cubolink on 27-05-2023.
-//
+// =================================
+// Created by Cubolink on 27-05-2023
+// =================================
 
 #ifndef NBODIES_PROBLEM_CAMERA_H
 #define NBODIES_PROBLEM_CAMERA_H
 
 #include <cmath>
+#include <iostream>
 
 class Camera
 {
@@ -84,7 +85,6 @@ public:
     float* getRotLag() {
         return camera_rot_lag;
     }
-
 };
 
 

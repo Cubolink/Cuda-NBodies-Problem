@@ -1,93 +1,102 @@
-//
-// Created by major on 20-05-2023.
-//
+// =================================
+// Created by Cubelink on 20-05-2023
+// =================================
 
 #ifndef NBODIES_PROBLEM_SIMULATION_H
 #define NBODIES_PROBLEM_SIMULATION_H
 
+#include <iostream>
 #include <cmath>
+#include <GL/glew.h>
 #include "data-structs.h"
 
-float3 bodyBodyInteraction(float3 i_body, float3 j_body, float3 ai)
+float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 {
-    float3 r;
-    r.x = j_body.x - i_body.x;
-    r.y = j_body.y - i_body.y;
-    r.z = j_body.z - i_body.z;
+    float3 r{};
+    r.x = jBody.x - iBody.x;
+    r.y = jBody.y - iBody.y;
+    r.z = jBody.z - iBody.z;
 
-    float distSqr = r.x*r.x + r.y*r.y + r.z*r.z;
-    // soft the distSqr here?
-
+    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z;
     float dist = sqrt(distSqr);
     float distCube = distSqr * dist;
 
     if (distCube < 1.f) return ai;
 
-    ai.x += r.x;
-    ai.y += r.y;
-    ai.z += r.z;
+    float s = jMass / distCube;
+
+    ai.x += r.x * s;
+    ai.y += r.y * s;
+    ai.z += r.z * s;
 
     return ai;
 }
 
-float3 tile_calculation(float3 myPosition, float3 *pdata, float3 acc)
+void nBodiesKernel(int i, float3 *dataPositions, float3 *dataVelocities, float *dataMasses, int nBodies)
 {
-    for (unsigned int i = 0; i < 1; i++)
+    float dt = 0.001;
+
+    float3 position = dataPositions[i];
+    float3 velocity = dataVelocities[i];
+
+    float3 acceleration = {.0f, .0f, .0f};
+
+    for (int j = 0; j < nBodies; j++)
     {
-        acc = bodyBodyInteraction(myPosition, pdata[i], acc);
+        acceleration = bodyBodyInteraction(position, dataPositions[j], dataMasses[j], acceleration);
     }
 
-    return acc;
+    // Update velocity
+    velocity.x += acceleration.x * dt;
+    velocity.y += acceleration.y * dt;
+    velocity.z += acceleration.z * dt;
+
+    // Update position
+    position.x += velocity.x * dt;
+    position.y += velocity.y * dt;
+    position.z += velocity.z * dt;
+
+    // Update particles data
+    dataPositions[i] = position;
+    dataVelocities[i] = velocity;
 }
 
-void galaxyKernel(int x, int y, float3 *pos, float3 *pdata, unsigned int width,
-                  unsigned int height, float step, int apprx, int offset)
+/**
+ * Updates positions and velocities of all bodies
+ * @param pdata
+ * @param nBodies
+ */
+void cpuComputeNBodies(float3 *dataPositions, float3 *dataVelocities, float *dataMasses, GLuint vbo, int nBodies)
 {
-    // index of my body
-    unsigned int pLoc = y * width + x;
-    unsigned int vLoc = width * height + pLoc;  // until width * height stores position, then stores velocities
 
-    // starting index of the position array
-    unsigned  int start = ((width * height) / apprx) * offset;
-
-    float3 myPosition = pdata[pLoc];
-    float3 myVelocity = pdata[vLoc];
-
-    float3 acc = {.0f, .0f, .0f};
-
-    unsigned int idx = 0;
-    unsigned int loop = ((width * height) / apprx);
-    for (int i = 0; i < loop; i++)
-    {
-        acc = tile_calculation(myPosition, pdata, acc);
+    // For each body, updates its position and velocity
+    for (int i = 0; i < nBodies; i++) {
+        // std::cout << i << "/" << nBodies << std::endl;
+        nBodiesKernel(i, dataPositions, dataVelocities, dataMasses, nBodies);
     }
 
-    // update velocity with above acc
-    myVelocity.x += acc.x * step;
-    myVelocity.y += acc.y * step;
-    myVelocity.z += acc.z * step;
+    // New VBO data
+    auto vboData = new float[nBodies * 8];
 
-    // update position
-    myPosition.x += myVelocity.x * step;
-    myPosition.y += myVelocity.y * step;
-    myPosition.z += myVelocity.z * step;
+    for (int i = 0; i < nBodies; i++)
+    {
+        int pIdx = i * 4;
+        int vIdx = pIdx + nBodies * 4;
 
-    // update pdata
-    pdata[pLoc] = myPosition;
-    pdata[vLoc] = myVelocity;
-}
+        vboData[pIdx] = dataPositions[i].x;
+        vboData[pIdx + 1] = dataPositions[i].y;
+        vboData[pIdx + 2] = dataPositions[i].z;
+        vboData[pIdx + 3] = 1.f;
 
-void cpuComputeGalaxy(float3 *pos, float3 *pdata, int width, int height,
-                      float step, int apprx, int offset)
-{
-    // Here we could split in threads, each one running galaxyKernel
-    // But we want CPU to use one thread, so:
-    for (int i = 0; i < height; i++)
-        for (int j = 0; j < width; j++)
-            // loc = i * width + j;
-            // (i x j) matrix means i are rows, j are columns => i is vertical , j is horizontal
-            // therefore y = i, x = j
-            galaxyKernel(j, i, pos, pdata, width, height, step, apprx, offset);
+        vboData[vIdx] = dataVelocities[i].x;
+        vboData[vIdx + 1] = dataVelocities[i].y;
+        vboData[vIdx + 2] = dataVelocities[i].z;
+        vboData[vIdx + 3] = 1.f;
+    }
+
+    // Update the VBO data
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, nBodies * 8 * sizeof(float), vboData);
 }
 
 
