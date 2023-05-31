@@ -30,17 +30,15 @@
 
 // Simulation parameters
 float scaleFactor = 1.5f;
-float gStep = 0.001f;
-int gOffset = 0;
-int gApprx = 4;
 
 // Simulation data storage
-float* gPos = nullptr;
-float* gVel = nullptr;
-float* gMass = nullptr;
-GLuint	vbo = 0;				// 8 float (4 position, 4 color)
-float*	dParticleData = nullptr;		// device side particle data storage
-float*	hParticleData = nullptr;		// host side particle data storage
+float* dataPositions = nullptr;
+float* dataVelocities = nullptr;
+float* dataMasses = nullptr;
+GLuint vbo = 0;
+float* dPositions = nullptr; // Device side particles positions
+float* dVelocities = nullptr; // Device side particles velocities
+float* dMasses = nullptr; // Device side particles masses
 
 // GL drawing attributes
 ParticleRenderer* renderer = nullptr;
@@ -71,44 +69,15 @@ void deleteVBO(GLuint* vbo);
 // Initialize CUDA data
 void initCUDA(int bodies)
 {
-	// Host particle data (position, velocity)
-	hParticleData = (float *) malloc (8 * bodies * sizeof(float));
-	
-	// device particle data
-	cudaMalloc( (void**) &dParticleData, 8 * bodies * sizeof(float));
-	
-	// load inital data set
-	int pCounter;
-	int idx = 0;
-	int vidx = 0;
-	int offset = 0;
-	for (int i = 0; i < bodies; i++)
-	{
-		// float array index
-		idx = i * 4;
-		vidx = bodies * 4 + idx;
-		
-		if ((i % 2) == 0)
-			offset = idx;
-		else
-			offset = (idx + (bodies / 2)) % (bodies * 4);
-		
-		offset = (offset * 3) / 4;
+	// Device particles data
+	cudaMalloc((void**) &dPositions, 3 * bodies * sizeof(float));
+	cudaMalloc((void**) &dVelocities, 3 * bodies * sizeof(float));
+	cudaMalloc((void**) &dMasses, bodies * sizeof(float));
 
-		// set value from global data storage
-		hParticleData[idx + 0]		= gPos[offset + 0];	// x
-		hParticleData[idx + 1] 	= gPos[offset + 1];	// y
-		hParticleData[idx + 2] 	= gPos[offset + 2];	// z
-		hParticleData[idx + 3] 	= gMass[offset / 3];	// mass
-		hParticleData[vidx + 0] 	= gVel[offset + 0];	// vx
-		hParticleData[vidx + 1]	= gVel[offset + 1];	// vy
-		hParticleData[vidx + 2] 	= gVel[offset + 2];	// vz
-		hParticleData[vidx + 3] 	= 1.0f;	// padding
-		
-	}
-	
-	// copy initial value to GPU memory
-	cudaMemcpy(dParticleData, hParticleData, 8 * bodies * sizeof(float), cudaMemcpyHostToDevice);
+	// Copy initial values to GPU memory
+	cudaMemcpy(dPositions, dataPositions, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dVelocities, dataVelocities, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dMasses, dataMasses, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 // Initializes OpenGL
@@ -139,7 +108,7 @@ void initGL(void)
 // Start CUDA loop code
 // ========================================================================
 
-__global__ void nBodiesKernel(float4* pvbo, float4* pdata)
+__global__ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float* masses)
 {	
 	// Index of my body	
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -147,11 +116,12 @@ __global__ void nBodiesKernel(float4* pvbo, float4* pdata)
 	int positionIndex = i;
 	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
 		
-	float4 position = pdata[positionIndex];
+	float3 position = positions[i];
+	float3 velocity = velocities[i];
 
 	// Update VBO
 	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
-	pvbo[velocityIndex] = pdata[velocityIndex];
+	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
 void runCuda(void)
@@ -166,7 +136,7 @@ void runCuda(void)
   int numBlocks = (NUM_BODIES + blockSize - 1) / blockSize;
 
 	// Run the kernel
-	nBodiesKernel<<<numBlocks, blockSize>>>(dptr, (float4*) dParticleData);
+	nBodiesKernel<<<numBlocks, blockSize>>>(dptr, (float3*) dPositions, (float3*) dVelocities, dMasses);
 
 	// Unmap vertex buffer object
 	cudaGLUnmapBufferObject(vbo);
@@ -303,11 +273,11 @@ void deleteVBO(GLuint* vbo)
 // ======================
 int main(int argc, char** argv)
 {
-	gPos = new float[NUM_BODIES * 3];
-	gVel = new float[NUM_BODIES * 3];
-	gMass = new float[NUM_BODIES];
+	dataPositions = new float[NUM_BODIES * 3];
+	dataVelocities = new float[NUM_BODIES * 3];
+	dataMasses = new float[NUM_BODIES];
 	// Data loading
-	loadData("../../../data/dubinski.tab", NUM_BODIES, gPos, gVel, gMass, scaleFactor);
+	loadData("../../../data/dubinski.tab", NUM_BODIES, dataPositions, dataVelocities, dataMasses, scaleFactor);
 		
 	// Create app window
 	glutInit(&argc, argv);
@@ -339,10 +309,10 @@ int main(int argc, char** argv)
 
 	deleteVBO((GLuint*) &vbo);
 
-	if (gPos)
-			free(gPos);
-	if (gVel)
-			free(gVel);
+	if (dataPositions)
+			free(dataPositions);
+	if (dataVelocities)
+			free(dataVelocities);
 	
 	if (renderer)
 		delete renderer;

@@ -18,13 +18,12 @@
 #include "simulation.h"
 
 // Number of particles to be rendered
-#define NUM_BODIES 4096
+#define NUM_BODIES 1024
 
 // Simulation parameters
 float scaleFactor = 1.5f;
 
 // Simulation data
-float3 *dataPosVel = nullptr;
 float3 *dataPositions = nullptr;
 float3 *dataVelocities = nullptr;
 float *dataMasses = nullptr;
@@ -83,6 +82,8 @@ void initGL()
 // ====================================
 void display()
 {
+	cpuComputeNBodies(dataPositions, dataVelocities, dataMasses, VBO, NUM_BODIES);
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// View transform
@@ -148,11 +149,8 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 			exit(0);
 			break;
-		case 's':
-				cpuComputeNBodies(dataPosVel, VBO, NUM_BODIES);
-				break;
 		default:
-				break;
+			break;
 	}
 	glutPostRedisplay();
 }
@@ -169,9 +167,8 @@ void idle()
 int main(int argc, char** argv)
 {
 	// Data loading
-  dataPosVel = new float3[NUM_BODIES * 2];  // [positions... velocities]
-	dataPositions = dataPosVel;
-	dataVelocities = dataPosVel + NUM_BODIES;
+	dataPositions = new float3[NUM_BODIES];
+	dataVelocities = new float3[NUM_BODIES];
 	dataMasses = new float[NUM_BODIES];
 	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 

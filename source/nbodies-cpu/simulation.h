@@ -7,10 +7,10 @@
 
 #include <iostream>
 #include <cmath>
-#include "data-structs.h"
 #include <GL/glew.h>
+#include "data-structs.h"
 
-float3 bodyBodyInteraction(float3 iBody, float3 jBody, float3 ai)
+float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 {
     float3 r{};
     r.x = jBody.x - iBody.x;
@@ -23,28 +23,27 @@ float3 bodyBodyInteraction(float3 iBody, float3 jBody, float3 ai)
 
     if (distCube < 1.f) return ai;
 
-    ai.x += r.x;
-    ai.y += r.y;
-    ai.z += r.z;
+    float s = jMass / distCube;
+
+    ai.x += r.x * s;
+    ai.y += r.y * s;
+    ai.z += r.z * s;
 
     return ai;
 }
 
-void nBodiesKernel(int i, float3 *particlesData, int nBodies)
+void nBodiesKernel(int i, float3 *dataPositions, float3 *dataVelocities, float *dataMasses, int nBodies)
 {
     float dt = 0.001;
 
-    unsigned int pIdx = i;
-    unsigned int vIdx = nBodies + pIdx;  // After all positions, it stores velocities
-
-    float3 position = particlesData[pIdx];
-    float3 velocity = particlesData[vIdx];
+    float3 position = dataPositions[i];
+    float3 velocity = dataVelocities[i];
 
     float3 acceleration = {.0f, .0f, .0f};
 
     for (int j = 0; j < nBodies; j++)
     {
-        acceleration = bodyBodyInteraction(position, particlesData[j], acceleration);
+        acceleration = bodyBodyInteraction(position, dataPositions[j], dataMasses[j], acceleration);
     }
 
     // Update velocity
@@ -58,8 +57,8 @@ void nBodiesKernel(int i, float3 *particlesData, int nBodies)
     position.z += velocity.z * dt;
 
     // Update particles data
-    particlesData[pIdx] = position;
-    particlesData[vIdx] = velocity;
+    dataPositions[i] = position;
+    dataVelocities[i] = velocity;
 }
 
 /**
@@ -67,15 +66,14 @@ void nBodiesKernel(int i, float3 *particlesData, int nBodies)
  * @param pdata
  * @param nBodies
  */
-void cpuComputeNBodies(float3 *particlesData, GLuint vbo, int nBodies)
+void cpuComputeNBodies(float3 *dataPositions, float3 *dataVelocities, float *dataMasses, GLuint vbo, int nBodies)
 {
-    /*
+
     // For each body, updates its position and velocity
     for (int i = 0; i < nBodies; i++) {
-        std::cout << i << "/" << nBodies << std::endl;
-        nBodiesKernel(i, pdata, nBodies);
+        // std::cout << i << "/" << nBodies << std::endl;
+        nBodiesKernel(i, dataPositions, dataVelocities, dataMasses, nBodies);
     }
-     */
 
     // New VBO data
     auto vboData = new float[nBodies * 8];
@@ -85,14 +83,14 @@ void cpuComputeNBodies(float3 *particlesData, GLuint vbo, int nBodies)
         int pIdx = i * 4;
         int vIdx = pIdx + nBodies * 4;
 
-        vboData[pIdx] = particlesData[i].x;
-        vboData[pIdx + 1] = particlesData[i].y;
-        vboData[pIdx + 2] = particlesData[i].z;
+        vboData[pIdx] = dataPositions[i].x;
+        vboData[pIdx + 1] = dataPositions[i].y;
+        vboData[pIdx + 2] = dataPositions[i].z;
         vboData[pIdx + 3] = 1.f;
 
-        vboData[vIdx] = particlesData[nBodies + i].x;
-        vboData[vIdx + 1] = particlesData[nBodies + i].y;
-        vboData[vIdx + 2] = particlesData[nBodies + i].z;
+        vboData[vIdx] = dataVelocities[i].x;
+        vboData[vIdx + 1] = dataVelocities[i].y;
+        vboData[vIdx + 2] = dataVelocities[i].z;
         vboData[vIdx + 3] = 1.f;
     }
 
