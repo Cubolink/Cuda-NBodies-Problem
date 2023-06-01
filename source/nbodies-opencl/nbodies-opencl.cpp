@@ -299,6 +299,8 @@ int main(int argc, char** argv)
     glutKeyboardFunc(key);
     glutIdleFunc(idle);
 
+    framerateTitle(windowTitle);
+
     // Start main loop
     glutMainLoop();
 
