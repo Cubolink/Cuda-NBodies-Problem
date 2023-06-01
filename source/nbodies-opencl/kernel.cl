@@ -2,9 +2,10 @@
 // Created by Cubolink on 20-05-2023
 // =================================
 
+#pragma OPENCL EXTENSION cl_khr_fp64: enable
 float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 {
-    float3 r{};
+    float3 r = {};
     r.x = jBody.x - iBody.x;
     r.y = jBody.y - iBody.y;
     r.z = jBody.z - iBody.z;
@@ -34,8 +35,8 @@ __kernel void nBodiesKernel(
     int i = get_global_id(0);
 
     float dt = 0.001;
-    float3 position = (float3) dataPositions[i];
-    float3 velocity = (float3) dataVelocities[i];
+    float3 position = (float3) dataPositions[3*i];
+    float3 velocity = (float3) dataVelocities[3*i];
     float3 acceleration = {.0f, .0f, .0f};
 
     for (int j = 0; j < 3 * nBodies; j += 3)
@@ -54,16 +55,11 @@ __kernel void nBodiesKernel(
     position.z += velocity.z * dt;
 
     // Update particles data
-    dataPositions[i] = position;
-    dataVelocities[i] = velocity;
-}
+    dataPositions[3*i + 0] = position.x;
+    dataPositions[3*i + 1] = position.y;
+    dataPositions[3*i + 2] = position.z;
+    dataVelocities[3*i + 0] = velocity.x;
+    dataVelocities[3*i + 1] = velocity.y;
+    dataVelocities[3*i + 2] = velocity.z;
 
-__kernel void random(
-    __global float *dataPositions,
-    __global float *dataVelocities,
-    __global float *dataMasses,
-    int nBodies)
-{
-    int id = get_global_id(0);
-    dataPositions[2*id+0] = 5;
 }
