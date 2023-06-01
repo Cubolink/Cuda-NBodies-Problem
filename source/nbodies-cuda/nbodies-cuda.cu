@@ -32,13 +32,18 @@
 // Simulation parameters
 float scaleFactor = 1.5f;
 
-// Simulation data storage
+// Simulation host data storage
 float* dataPositions = nullptr;
 float* dataVelocities = nullptr;
 float* dataMasses = nullptr;
-GLuint vbo = 0;
+
+GLuint VBO = 0; // OpenGL VBO
+struct cudaGraphicsResource *cudaVBOResource; // CUDA Graphics Resource pointer
+
 float* dPositions = nullptr; // Device side particles positions
 float* dVelocities = nullptr; // Device side particles velocities
+float* dFuturePositions = nullptr; // Device side particles future positions
+float* dFutureVelocities = nullptr; // Device side particles future velocities
 float* dMasses = nullptr; // Device side particles masses
 
 // GL drawing attributes
@@ -73,6 +78,8 @@ void initCUDA(int bodies)
 	// Device particles data
 	cudaMalloc((void**) &dPositions, 3 * bodies * sizeof(float));
 	cudaMalloc((void**) &dVelocities, 3 * bodies * sizeof(float));
+	cudaMalloc((void**) &dFuturePositions, 3 * bodies * sizeof(float));
+	cudaMalloc((void**) &dFutureVelocities, 3 * bodies * sizeof(float));
 	cudaMalloc((void**) &dMasses, bodies * sizeof(float));
 
 	// Copy initial values to GPU memory
@@ -98,9 +105,9 @@ void initGL(void)
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 
 	// Particle renderer initialization
-	createVBO((GLuint*) &vbo);
+	createVBO((GLuint*) &VBO);
 	renderer = new ParticleRenderer(NUM_BODIES);
-	renderer->setVBO(vbo);
+	renderer->setVBO(VBO);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
@@ -133,7 +140,7 @@ float3 bodyBodyInteraction(float3 iBody, float4 jData, float3 ai)
 }
 
 __global__
-void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float* masses)
+void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses)
 {
 	__shared__ float4 tileData[TILE_WIDTH];
 
@@ -180,8 +187,8 @@ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float* m
 	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
 
   // Update device memory
-	positions[x] = position;
-	velocities[x] = velocity;
+	futurePositions[x] = position;
+	futureVelocities[x] = velocity;
 
 	// Update VBO
 	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
@@ -192,16 +199,22 @@ void runCuda(void)
 {
 	// Map OpenGL vertex buffer object for writing from CUDA
 	float4 *dptr;
-	cudaGLMapBufferObject((void**) &dptr, vbo);
+	cudaGraphicsMapResources(1, &cudaVBOResource, 0);
+	size_t numBytes;
+  cudaGraphicsResourceGetMappedPointer((void**) &dptr, &numBytes, cudaVBOResource);
 
   // Round up in case N is not a multiple of blockSize
   int numBlocks = (NUM_BODIES + TILE_WIDTH - 1) / TILE_WIDTH;
 
 	// Run the kernel
-	nBodiesKernel<<<numBlocks, TILE_WIDTH>>>(dptr, (float3*) dPositions, (float3*) dVelocities, dMasses);
+	nBodiesKernel<<<numBlocks, TILE_WIDTH>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses);
+
+	// Update positions and velocities for next iteration
+	cudaMemcpy(dPositions, dFuturePositions, 3 * NUM_BODIES * sizeof(float), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(dVelocities, dFutureVelocities, 3 * NUM_BODIES * sizeof(float), cudaMemcpyDeviceToDevice);
 
 	// Unmap vertex buffer object
-	cudaGLUnmapBufferObject(vbo);
+	cudaGraphicsUnmapResources(1, &cudaVBOResource, 0);
 }
 
 // ========================================================================
@@ -315,8 +328,8 @@ void createVBO(GLuint* vbo)
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	// Register buffer object with CUDA
-	cudaGLRegisterBufferObject(*vbo);
+  // Register this buffer object with CUDA
+  cudaGraphicsGLRegisterBuffer(&cudaVBOResource, *vbo, cudaGraphicsMapFlagsWriteDiscard);
 }
 
 // Deletes the VBO and unbinds it from the CUDA resource
@@ -369,7 +382,7 @@ int main(int argc, char** argv)
 	// Start main loop
   glutMainLoop();
 
-	deleteVBO((GLuint*) &vbo);
+	deleteVBO((GLuint*) &VBO);
 
 	if (dataPositions)
 			free(dataPositions);
