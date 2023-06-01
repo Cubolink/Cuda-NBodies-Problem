@@ -129,11 +129,10 @@ void runSimulation() {  // runOpenCl
     cl::NDRange local(16);
     cl::NDRange global(16 * ((unsigned int) ((NUM_BODIES + 16 - 1)/16)));
 
-    nBodiesKernel.setArg(0, cl::EnqueueArgs(queue, cl::NDRange(NUM_BODIES)));
-    nBodiesKernel.setArg(1, dPositions);
-    nBodiesKernel.setArg(2, dVelocities);
-    nBodiesKernel.setArg(3, dMasses);
-    nBodiesKernel.setArg(4, NUM_BODIES);
+    nBodiesKernel.setArg(0, dPositions);
+    nBodiesKernel.setArg(1, dVelocities);
+    nBodiesKernel.setArg(2, dMasses);
+    nBodiesKernel.setArg(3, NUM_BODIES);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
     nBodiesKernel();
     queue.finish();
