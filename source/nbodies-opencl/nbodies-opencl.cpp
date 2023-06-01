@@ -14,6 +14,8 @@
 #include <GL/glut.h>
 #endif
 
+#define __CL_ENABLE_EXCEPTIONS
+
 #ifdef __APPLE__
 #include <OpenCL/cl.hpp>
 #else
