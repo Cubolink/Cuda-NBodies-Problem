@@ -25,20 +25,32 @@
 #include "framerate.h"
 #include "particle-renderer.h"
 
-// Number of particles to be rendered
+// Number of particles to be loaded from file
 #define NUM_BODIES 16384
-#define TILE_WIDTH 256
+
+// Block size
+#define BLOCK_SIZE 251
+
+// Number of CUDA blocks
+int numBlocks;
+
+// Number of particles after padding, if there exists padding
+int numBodies;
 
 // Simulation parameters
 float scaleFactor = 1.5f;
 
-// Simulation host data storage
+// Simulation data storage loaded from file
 float* dataPositions = nullptr;
 float* dataVelocities = nullptr;
 float* dataMasses = nullptr;
 
 GLuint VBO = 0; // OpenGL VBO
 struct cudaGraphicsResource *cudaVBOResource; // CUDA Graphics Resource pointer
+
+float* hPositions = nullptr;
+float* hVelocities = nullptr;
+float* hMasses = nullptr;
 
 float* dPositions = nullptr; // Device side particles positions
 float* dVelocities = nullptr; // Device side particles velocities
@@ -53,14 +65,11 @@ float	spriteSize = scaleFactor * 0.25f;
 // Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
-// Cuda parameters
-int threadsPerBlock = 256;
-
 // Clamp macro
 #define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
 
 // Forward declarations
-void initCUDA(int bodies);
+void initCUDA();
 void initGL(void);
 void runCuda(void);
 void display(void);
@@ -73,19 +82,38 @@ void createVBO(GLuint* vbo);
 void deleteVBO(GLuint* vbo);
 
 // Initialize CUDA data
-void initCUDA(int bodies)
-{
+void initCUDA()
+{	
+	// Round up in case NUM_BODIES is not a multiple of BLOCK_SIZE
+	numBlocks = (NUM_BODIES + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+	// Number of particles after padding, if there exists padding
+	numBodies = numBlocks * BLOCK_SIZE;
+
+	hPositions = new float[numBodies * 3];
+	hVelocities = new float[numBodies * 3];
+	hMasses = new float[numBodies];
+
+	// Apply padding in case of round up
+	std::fill_n(hPositions, 3 * numBodies, 0.0f);
+	memcpy(hPositions, dataPositions, 3 * NUM_BODIES * sizeof(float));
+	std::fill_n(hVelocities, 3 * numBodies, 0.0f);
+	memcpy(hVelocities, dataVelocities, 3 * NUM_BODIES * sizeof(float));
+	std::fill_n(hMasses, numBodies, 0.0f);
+	memcpy(hMasses, dataMasses, NUM_BODIES * sizeof(float));
+
 	// Device particles data
-	cudaMalloc((void**) &dPositions, 3 * bodies * sizeof(float));
-	cudaMalloc((void**) &dVelocities, 3 * bodies * sizeof(float));
-	cudaMalloc((void**) &dFuturePositions, 3 * bodies * sizeof(float));
-	cudaMalloc((void**) &dFutureVelocities, 3 * bodies * sizeof(float));
-	cudaMalloc((void**) &dMasses, bodies * sizeof(float));
+	cudaMalloc((void**) &dPositions, 3 * numBodies * sizeof(float));
+	cudaMalloc((void**) &dVelocities, 3 * numBodies * sizeof(float));
+	cudaMalloc((void**) &dFuturePositions, 3 * numBodies * sizeof(float));
+	cudaMalloc((void**) &dFutureVelocities, 3 * numBodies * sizeof(float));
+	cudaMalloc((void**) &dMasses, numBodies * sizeof(float));
 
 	// Copy initial values to GPU memory
-	cudaMemcpy(dPositions, dataPositions, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(dVelocities, dataVelocities, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(dMasses, dataMasses, bodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dPositions, hPositions, 3 * numBodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dVelocities, hVelocities, 3 * numBodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dMasses, hMasses, numBodies * sizeof(float), cudaMemcpyHostToDevice);
+
 }
 
 // Initializes OpenGL
@@ -106,7 +134,7 @@ void initGL(void)
 
 	// Particle renderer initialization
 	createVBO((GLuint*) &VBO);
-	renderer = new ParticleRenderer(NUM_BODIES);
+	renderer = new ParticleRenderer(numBodies);
 	renderer->setVBO(VBO);
 	renderer->setSpriteSize(0.4f);
 	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
@@ -140,23 +168,22 @@ float3 bodyBodyInteraction(float3 iBody, float4 jData, float3 ai)
 }
 
 __global__
-void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses)
+void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int bodies)
 {
-	__shared__ float4 tileData[TILE_WIDTH];
+	__shared__ float4 tileData[BLOCK_SIZE];
 
 	float dt = 0.001f;
 
 	// Index of my body	
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	
-	// TODO: Use only one array of data, in order to acces it at most twice
 	float3 position = positions[x];
 	float3 velocity = velocities[x];
 
 	float3 acceleration = {.0f, .0f, .0f};
 
 	int j, k, tile;
-	for (j = 0, tile = 0; j < NUM_BODIES; j += TILE_WIDTH, tile++) {    
+	for (j = 0, tile = 0; j < bodies; j += BLOCK_SIZE, tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
@@ -170,8 +197,6 @@ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* 
 
 		__syncthreads();   
 	}
-
-	// TODO: Two buffers of data for current data and future data
 
 	// Update velocity
 	velocity.x += acceleration.x * dt;
@@ -203,15 +228,12 @@ void runCuda(void)
 	size_t numBytes;
   cudaGraphicsResourceGetMappedPointer((void**) &dptr, &numBytes, cudaVBOResource);
 
-  // Round up in case N is not a multiple of blockSize
-  int numBlocks = (NUM_BODIES + TILE_WIDTH - 1) / TILE_WIDTH;
-
 	// Run the kernel
-	nBodiesKernel<<<numBlocks, TILE_WIDTH>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses);
+	nBodiesKernel<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
 
 	// Update positions and velocities for next iteration
-	cudaMemcpy(dPositions, dFuturePositions, 3 * NUM_BODIES * sizeof(float), cudaMemcpyDeviceToDevice);
-	cudaMemcpy(dVelocities, dFutureVelocities, 3 * NUM_BODIES * sizeof(float), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(dPositions, dFuturePositions, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(dVelocities, dFutureVelocities, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
 
 	// Unmap vertex buffer object
 	cudaGraphicsUnmapResources(1, &cudaVBOResource, 0);
@@ -324,7 +346,7 @@ void createVBO(GLuint* vbo)
 	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
 
 	// Initialize vertex buffer object
-	glBufferData(GL_ARRAY_BUFFER, NUM_BODIES * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -362,11 +384,11 @@ int main(int argc, char** argv)
 	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", NUM_BODIES); 
 	glutCreateWindow(windowTitle);
     
+	// CUDA setup
+  initCUDA();
+
 	// OpenGL setup	
 	initGL();
-	
-	// CUDA setup
-  initCUDA(NUM_BODIES);
     
 	// GL callback functions
 	glutDisplayFunc(display);
