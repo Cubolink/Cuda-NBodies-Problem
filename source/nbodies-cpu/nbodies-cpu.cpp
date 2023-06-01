@@ -172,12 +172,12 @@ int main(int argc, char** argv)
 	dataMasses = new float[NUM_BODIES];
 	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
-	// Create OpenGL app window
+	// Create app window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 	glutInitWindowSize(720, 480);
 	char windowTitle[256];
-	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", NUM_BODIES); 
+	sprintf(windowTitle, "CPU Galaxy Simulation (%d bodies)", NUM_BODIES); 
 	glutCreateWindow(windowTitle);
 
 	// GL setup
@@ -190,6 +190,9 @@ int main(int argc, char** argv)
 	glutMotionFunc(motion);
 	glutKeyboardFunc(key);
 	glutIdleFunc(idle);
+
+	// FPS on title
+	framerateTitle(windowTitle);
 
 	// Start main loop
 	glutMainLoop();

@@ -27,6 +27,7 @@
 
 // Number of particles to be rendered
 #define NUM_BODIES 16384
+#define TILE_WIDTH 256
 
 // Simulation parameters
 float scaleFactor = 1.5f;
@@ -77,7 +78,7 @@ void initCUDA(int bodies)
 	// Copy initial values to GPU memory
 	cudaMemcpy(dPositions, dataPositions, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(dVelocities, dataVelocities, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(dMasses, dataMasses, 3 * bodies * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(dMasses, dataMasses, bodies * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 // Initializes OpenGL
@@ -108,16 +109,79 @@ void initGL(void)
 // Start CUDA loop code
 // ========================================================================
 
-__global__ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float* masses)
-{	
-	// Index of my body	
-	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+__device__
+float3 bodyBodyInteraction(float3 iBody, float4 jData, float3 ai)
+{
+    float3 r{};
+    r.x = jData.x - iBody.x;
+    r.y = jData.y - iBody.y;
+    r.z = jData.z - iBody.z;
 
-	int positionIndex = i;
-	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
+    float distSqr = r.x * r.x + r.y * r.y + r.z * r.z;
+    float dist = sqrt(distSqr);
+    float distCube = distSqr * dist;
+
+    if (distCube < 1.f) return ai;
+
+    float s = jData.w / distCube;
+
+    ai.x += r.x * s;
+    ai.y += r.y * s;
+    ai.z += r.z * s;
+
+    return ai;
+}
+
+__global__
+void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float* masses)
+{
+	__shared__ float4 tileData[TILE_WIDTH];
+
+	float dt = 0.001f;
+
+	// Index of my body	
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	// TODO: Use only one array of data, in order to acces it at most twice
+	float3 position = positions[x];
+	float3 velocity = velocities[x];
+
+	float3 acceleration = {.0f, .0f, .0f};
+
+	int j, k, tile;
+	for (j = 0, tile = 0; j < NUM_BODIES; j += TILE_WIDTH, tile++) {    
+		int idx = tile * blockDim.x + threadIdx.x;     
+
+		float3 jPosition = positions[idx];
+		tileData[threadIdx.x] = make_float4(jPosition.x, jPosition.y, jPosition.z, masses[idx]);     
+
+		__syncthreads();     
 		
-	float3 position = positions[i];
-	float3 velocity = velocities[i];
+		for (k = 0; k < blockDim.x; k++) {     
+			acceleration = bodyBodyInteraction(position, tileData[k], acceleration);   
+		}
+
+		__syncthreads();   
+	}
+
+	// TODO: Two buffers of data for current data and future data
+
+	// Update velocity
+	velocity.x += acceleration.x * dt;
+	velocity.y += acceleration.y * dt;
+	velocity.z += acceleration.z * dt;
+
+	// Update position
+	position.x += velocity.x * dt;
+	position.y += velocity.y * dt;
+	position.z += velocity.z * dt;
+
+	int positionIndex = x;
+	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
+
+  // Update device memory
+	positions[x] = position;
+	velocities[x] = velocity;
 
 	// Update VBO
 	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
@@ -130,13 +194,11 @@ void runCuda(void)
 	float4 *dptr;
 	cudaGLMapBufferObject((void**) &dptr, vbo);
 
-	int blockSize = 256; // Blocks of size 16 x 16
-
   // Round up in case N is not a multiple of blockSize
-  int numBlocks = (NUM_BODIES + blockSize - 1) / blockSize;
+  int numBlocks = (NUM_BODIES + TILE_WIDTH - 1) / TILE_WIDTH;
 
 	// Run the kernel
-	nBodiesKernel<<<numBlocks, blockSize>>>(dptr, (float3*) dPositions, (float3*) dVelocities, dMasses);
+	nBodiesKernel<<<numBlocks, TILE_WIDTH>>>(dptr, (float3*) dPositions, (float3*) dVelocities, dMasses);
 
 	// Unmap vertex buffer object
 	cudaGLUnmapBufferObject(vbo);
