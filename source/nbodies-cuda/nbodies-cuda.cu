@@ -406,13 +406,14 @@ int main(int argc, char** argv)
 
 	deleteVBO((GLuint*) &VBO);
 
-	if (dataPositions)
-			free(dataPositions);
-	if (dataVelocities)
-			free(dataVelocities);
-	
-	if (renderer)
-		delete renderer;
+	// Free heap memory
+	free(dataPositions);
+	free(dataVelocities);
+	free(dataMasses);
+	free(hPositions);
+	free(hVelocities);
+	free(hMasses);
+	delete renderer;
 	
     return 0;
 
