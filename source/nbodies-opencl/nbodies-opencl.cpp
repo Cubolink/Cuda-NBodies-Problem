@@ -45,14 +45,16 @@ float3* dataPositions = nullptr;
 float3* dataVelocities = nullptr;
 float* dataMasses = nullptr;
 
-cl::Buffer dPositions; // Device side particles positions
-cl::Buffer dVelocities; // Device side particles velocities
-cl::Buffer dMasses; // Device side particles masses
+// Device side data buffers
+cl::Buffer dPositions;
+cl::Buffer dVelocities;
+cl::Buffer dMasses;
 cl::Buffer dVBO;
-
+// OpenCL stuff
 cl::CommandQueue queue;
 cl::Program program;
 cl::Kernel nBodiesKernel;
+cl::Context context;
 
 // GL drawing attributes
 GLuint VBO = 0;
@@ -81,6 +83,26 @@ std::string load_program(const std::string& input) {
     return {std::istreambuf_iterator<char>(stream),
             (std::istreambuf_iterator<char>())};
 
+}
+
+void initOpenCL() {
+    // create a context
+    context = cl::Context(DEVICE);
+
+    // get the command queue
+    queue = cl::CommandQueue(context);
+
+    // load in kernel source, creating a program object for the context
+    program = cl::Program(context, load_program("../../../source/nbodies-opencl/kernel.cl"), true);
+
+    // create the kernel functor
+    nBodiesKernel = cl::Kernel(program, "nBodiesKernel");
+
+    // Init device data, copying data from host for positions, velocities and masses
+    dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, false);
+    dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, false);
+    dMasses = cl::Buffer(context, dataMasses, dataMasses+NUM_BODIES, true);
+    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * NUM_BODIES);
 }
 
 // Creates the VBO and binds it to a CUDA resource
@@ -130,6 +152,8 @@ void initGL()
 }
 
 void runSimulation() {  // runOpenCl
+    // Prepare the kernel
+    int nBodies = NUM_BODIES;
     int numGroups = (NUM_BODIES + GROUP_SIZE - 1) / GROUP_SIZE;
 
     cl::NDRange global(GROUP_SIZE * numGroups);  // Total number of work items
@@ -141,12 +165,9 @@ void runSimulation() {  // runOpenCl
     nBodiesKernel.setArg(3, dMasses);
     nBodiesKernel.setArg(4, NUM_BODIES);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
+    // Run the kernel
     nBodiesKernel();
     queue.finish();
-
-    int nBodies = NUM_BODIES;
-    // For each body, updates its position and velocity
-    // ...
 
     // New VBO data
     auto vboData = new float[nBodies * 8];
@@ -244,36 +265,14 @@ void idle()
 
 int main(int argc, char** argv)
 {
-    // Declare host containers
-    std::cout << "Hello OpenCL project!" << std::endl;
-
     // Fill host containers
     dataPositions = new float3[NUM_BODIES];
     dataVelocities = new float3[NUM_BODIES];
     dataMasses = new float[NUM_BODIES];
     loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
-    /// Init OpenCL
-
-    // create a context
-    cl::Context context(DEVICE);
-
-    // load in kernel source, creating a program object for the context
-    program = cl::Program(context, load_program("../../../source/nbodies-opencl/kernel.cl"), true);
-    // get the command queue
-    queue = cl::CommandQueue(context);
-
-    // create the kernel functor
-    nBodiesKernel = cl::Kernel(program, "nBodiesKernel");
-
-    // copy data to device
-    dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, false);
-    dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, false);
-    dMasses = cl::Buffer(context, dataMasses, dataMasses+NUM_BODIES, true);
-    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * NUM_BODIES);
-
-    // allocate results container
-    // skipped due writing into the same array
+    // OpenCL setup
+    initOpenCL();
 
     // Crete app window
     glutInit(&argc, argv);
@@ -298,9 +297,11 @@ int main(int argc, char** argv)
 
     // Start main loop
     glutMainLoop();
-
-    if (renderer)
-        delete renderer;
+    
+    delete renderer;
+    delete dataPositions;
+    delete dataVelocities;
+    delete dataMasses;
 
     return 0;
 }
