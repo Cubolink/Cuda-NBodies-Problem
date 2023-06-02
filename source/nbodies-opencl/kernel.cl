@@ -26,6 +26,7 @@ float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 }
 
 __kernel void nBodiesKernel(
+    __global float4 *pvbo,
     __global float *positions,
     __global float *velocities,
     __global float *masses,
@@ -81,5 +82,18 @@ __kernel void nBodiesKernel(
     velocities[3*i + 0] = velocity.x;
     velocities[3*i + 1] = velocity.y;
     velocities[3*i + 2] = velocity.z;
+
+    // Update VBO
+    int positionIndex = i;
+    int velocityIndex = positionIndex + get_local_size(0) * get_num_groups(0);
+    pvbo[positionIndex].x = position.x;
+    pvbo[positionIndex].y = position.y;
+    pvbo[positionIndex].z = position.z;
+    pvbo[positionIndex].w = 1.f;
+
+    pvbo[velocityIndex].x = velocity.x;
+    pvbo[velocityIndex].y = velocity.y;
+    pvbo[velocityIndex].z = velocity.z;
+    pvbo[velocityIndex].w = 1.f;
 
 }

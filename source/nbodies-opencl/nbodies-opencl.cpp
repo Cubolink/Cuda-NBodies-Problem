@@ -48,6 +48,7 @@ float* dataMasses = nullptr;
 cl::Buffer dPositions; // Device side particles positions
 cl::Buffer dVelocities; // Device side particles velocities
 cl::Buffer dMasses; // Device side particles masses
+cl::Buffer dVBO;
 
 cl::CommandQueue queue;
 cl::Program program;
@@ -134,10 +135,11 @@ void runSimulation() {  // runOpenCl
     cl::NDRange global(GROUP_SIZE * numGroups);  // Total number of work items
     cl::NDRange local(GROUP_SIZE);  // Work items in each work-group
 
-    nBodiesKernel.setArg(0, dPositions);
-    nBodiesKernel.setArg(1, dVelocities);
-    nBodiesKernel.setArg(2, dMasses);
-    nBodiesKernel.setArg(3, NUM_BODIES);
+    nBodiesKernel.setArg(0, dVBO);
+    nBodiesKernel.setArg(1, dPositions);
+    nBodiesKernel.setArg(2, dVelocities);
+    nBodiesKernel.setArg(3, dMasses);
+    nBodiesKernel.setArg(4, NUM_BODIES);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
     nBodiesKernel();
     queue.finish();
@@ -148,22 +150,7 @@ void runSimulation() {  // runOpenCl
 
     // New VBO data
     auto vboData = new float[nBodies * 8];
-
-    for (int i = 0; i < nBodies; i++)
-    {
-        int pIdx = i * 4;
-        int vIdx = pIdx + nBodies * 4;
-
-        vboData[pIdx] = dataPositions[i].x;
-        vboData[pIdx + 1] = dataPositions[i].y;
-        vboData[pIdx + 2] = dataPositions[i].z;
-        vboData[pIdx + 3] = 1.f;
-
-        vboData[vIdx] = dataVelocities[i].x;
-        vboData[vIdx + 1] = dataVelocities[i].y;
-        vboData[vIdx + 2] = dataVelocities[i].z;
-        vboData[vIdx + 3] = 1.f;
-    }
+    queue.enqueueReadBuffer(dVBO, CL_TRUE, 0, 8 * sizeof(float) * nBodies, vboData);
 
     // Update the VBO data
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -280,9 +267,10 @@ int main(int argc, char** argv)
     nBodiesKernel = cl::Kernel(program, "nBodiesKernel");
 
     // copy data to device
-    dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, true);
-    dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, true);
+    dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, false);
+    dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, false);
     dMasses = cl::Buffer(context, dataMasses, dataMasses+NUM_BODIES, true);
+    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * NUM_BODIES);
 
     // allocate results container
     // skipped due writing into the same array
