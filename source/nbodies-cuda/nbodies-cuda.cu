@@ -27,10 +27,10 @@
 #include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 16384
+#define NUM_BODIES 4096
 
 // Block size
-#define BLOCK_SIZE 251
+#define BLOCK_SIZE 256
 
 // Number of CUDA blocks
 int numBlocks;
@@ -188,8 +188,8 @@ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* 
 
 	float3 acceleration = {.0f, .0f, .0f};
 
-	int j, k, tile;
-	for (j = 0, tile = 0; j < bodies; j += BLOCK_SIZE, tile++) {    
+	int k, tile;
+	for (tile = 0; tile * BLOCK_SIZE < bodies; tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
