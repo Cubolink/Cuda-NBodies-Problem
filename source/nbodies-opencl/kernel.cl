@@ -39,8 +39,8 @@ __kernel void nBodiesKernel(
     __local float4 tileData[256];
 
     float dt = 0.001;
-    float3 position = (float3) positions[3*i];
-    float3 velocity = (float3) velocities[3*i];
+    float3 position = {positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]};
+    float3 velocity = {velocities[3 * i], velocities[3 * i + 1], velocities[3 * i + 2]};
     float3 acceleration = {.0f, .0f, .0f};
 
     for (int tile = 0; tile * get_local_size(0) < nBodies; tile++) {
