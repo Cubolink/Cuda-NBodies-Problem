@@ -50,7 +50,7 @@ __kernel void nBodiesKernel(
         tileData[local_i].x = positions[3*j];
         tileData[local_i].y = positions[3*j + 1];
         tileData[local_i].z = positions[3*j + 2];
-        tileData[local_i].w = positions[j];
+        tileData[local_i].w = masses[j];
 
         barrier(CLK_LOCAL_MEM_FENCE);
 
