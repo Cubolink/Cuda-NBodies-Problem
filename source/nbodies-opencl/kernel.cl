@@ -35,15 +35,34 @@ __kernel void nBodiesKernel(
     int i = get_global_id(0);
     int local_i = get_local_id(0);
 
+    __local float4 tileData[256];
+
     float dt = 0.001;
     float3 position = (float3) positions[3*i];
     float3 velocity = (float3) velocities[3*i];
     float3 acceleration = {.0f, .0f, .0f};
 
-    for (int k = 0; k < 3 * nBodies; k += 3)
-    {
-        acceleration = bodyBodyInteraction(position, positions[k], masses[k], acceleration);
+    for (int tile = 0; tile * get_local_size(0) < nBodies; tile++) {
+        // Copy global to local memory, only one tile in an iteration
+        // Each thread copy one part of the tile
+        int j = tile * get_local_size(0) + get_local_id(0);
+        tileData[local_i].x = positions[3*j];
+        tileData[local_i].y = positions[3*j + 1];
+        tileData[local_i].z = positions[3*j + 2];
+        tileData[local_i].w = positions[j];
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        // Each thread computes the acceleration of its body inteacting with all bodies in the tile
+        for (int k = 0; k < get_local_size(0); k++)
+        {
+            float3 kPosition = {tileData[k].x, tileData[k].y, tileData[k].z};
+            acceleration = bodyBodyInteraction(position, kPosition, tileData[k].w, acceleration);
+        }
+
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
+
 
     // Update velocity
     velocity.x += acceleration.x * dt;

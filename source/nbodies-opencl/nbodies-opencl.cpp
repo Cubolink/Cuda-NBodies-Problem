@@ -61,6 +61,9 @@ float	spriteSize = scaleFactor * 0.25f;
 // Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
+// OpenCL work-group size
+#define GROUP_SIZE 256
+
 // Clamp macro
 #define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
 
@@ -126,8 +129,10 @@ void initGL()
 }
 
 void runSimulation() {  // runOpenCl
-    cl::NDRange local(16);
-    cl::NDRange global(16 * ((unsigned int) ((NUM_BODIES + 16 - 1)/16)));
+    int numGroups = (NUM_BODIES + GROUP_SIZE - 1) / GROUP_SIZE;
+
+    cl::NDRange global(GROUP_SIZE * numGroups);  // Total number of work items
+    cl::NDRange local(GROUP_SIZE);  // Work items in each work-group
 
     nBodiesKernel.setArg(0, dPositions);
     nBodiesKernel.setArg(1, dVelocities);
@@ -260,6 +265,8 @@ int main(int argc, char** argv)
     dataVelocities = new float3[NUM_BODIES];
     dataMasses = new float[NUM_BODIES];
     loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
+
+    /// Init OpenCL
 
     // create a context
     cl::Context context(DEVICE);
