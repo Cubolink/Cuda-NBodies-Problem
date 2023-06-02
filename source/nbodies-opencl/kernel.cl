@@ -26,22 +26,23 @@ float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 }
 
 __kernel void nBodiesKernel(
-    __global float *dataPositions,
-    __global float *dataVelocities,
-    __global float *dataMasses,
+    __global float *positions,
+    __global float *velocities,
+    __global float *masses,
     int nBodies) {
     // Warning: float3 are 16-bit in openCL, ie: they are as float4.
     // This may complicate things
     int i = get_global_id(0);
+    int local_i = get_local_id(0);
 
     float dt = 0.001;
-    float3 position = (float3) dataPositions[3*i];
-    float3 velocity = (float3) dataVelocities[3*i];
+    float3 position = (float3) positions[3*i];
+    float3 velocity = (float3) velocities[3*i];
     float3 acceleration = {.0f, .0f, .0f};
 
-    for (int j = 0; j < 3 * nBodies; j += 3)
+    for (int k = 0; k < 3 * nBodies; k += 3)
     {
-        acceleration = bodyBodyInteraction(position, dataPositions[j], dataMasses[j], acceleration);
+        acceleration = bodyBodyInteraction(position, positions[k], masses[k], acceleration);
     }
 
     // Update velocity
@@ -55,11 +56,11 @@ __kernel void nBodiesKernel(
     position.z += velocity.z * dt;
 
     // Update particles data
-    dataPositions[3*i + 0] = position.x;
-    dataPositions[3*i + 1] = position.y;
-    dataPositions[3*i + 2] = position.z;
-    dataVelocities[3*i + 0] = velocity.x;
-    dataVelocities[3*i + 1] = velocity.y;
-    dataVelocities[3*i + 2] = velocity.z;
+    positions[3*i + 0] = position.x;
+    positions[3*i + 1] = position.y;
+    positions[3*i + 2] = position.z;
+    velocities[3*i + 0] = velocity.x;
+    velocities[3*i + 1] = velocity.y;
+    velocities[3*i + 2] = velocity.z;
 
 }
