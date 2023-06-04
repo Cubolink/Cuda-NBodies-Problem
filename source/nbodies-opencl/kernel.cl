@@ -30,13 +30,12 @@ __kernel void nBodiesKernel(
     __global float *positions,
     __global float *velocities,
     __global float *masses,
+    __local float4 *tileData,
     int nBodies) {
     // Warning: float3 are 16-bit in openCL, ie: they are as float4.
     // This may complicate things
     int i = get_global_id(0);
     int local_i = get_local_id(0);
-
-    __local float4 tileData[256];
 
     float dt = 0.001;
     float3 position = {positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]};
@@ -85,7 +84,7 @@ __kernel void nBodiesKernel(
 
     // Update VBO
     int positionIndex = i;
-    int velocityIndex = positionIndex + get_local_size(0) * get_num_groups(0);
+    int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
     pvbo[positionIndex].x = position.x;
     pvbo[positionIndex].y = position.y;
     pvbo[positionIndex].z = position.z;

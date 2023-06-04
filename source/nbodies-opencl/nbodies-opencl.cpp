@@ -34,13 +34,13 @@ struct float3
     float z;
 };
 
-// Number of particles to be rendered
+// Number of particles to be loaded and rendered from file
 #define NUM_BODIES 16384
 
 // Simulation parameters
 float scaleFactor = 1.5f;
 
-// Simulation data storage
+// Simulation data storage loaded from file
 float3* dataPositions = nullptr;
 float3* dataVelocities = nullptr;
 float* dataMasses = nullptr;
@@ -66,6 +66,11 @@ Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // OpenCL work-group size
 #define GROUP_SIZE 256
+// OpenCL number of groups
+int clNumGroups;
+// Number of particles our kernel will work after padding, if any
+int clNumBodies;
+
 
 // Clamp macro
 #define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
@@ -86,6 +91,13 @@ std::string load_program(const std::string& input) {
 }
 
 void initOpenCL() {
+    // Round up in case NUM_BODIES is not a multiple of GROUP_SIZE
+    clNumGroups = (NUM_BODIES + GROUP_SIZE - 1) / GROUP_SIZE;
+
+    // Number of particles. If clNumGroups was rounded, then there's padding and clNumBodies > NUM_BODIES
+    clNumBodies = clNumGroups * GROUP_SIZE;
+    int paddedBodies = (clNumBodies - NUM_BODIES);
+
     // create a context
     context = cl::Context(DEVICE);
 
@@ -99,10 +111,22 @@ void initOpenCL() {
     nBodiesKernel = cl::Kernel(program, "nBodiesKernel");
 
     // Init device data, copying data from host for positions, velocities and masses
-    dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, false);
-    dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, false);
-    dMasses = cl::Buffer(context, dataMasses, dataMasses+NUM_BODIES, true);
-    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * NUM_BODIES);
+    dPositions = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
+    dVelocities = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
+    dMasses = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float));
+    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * clNumBodies);
+
+    queue.enqueueWriteBuffer(dPositions, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataPositions);
+    queue.enqueueWriteBuffer(dVelocities, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataVelocities);
+    queue.enqueueWriteBuffer(dMasses, CL_TRUE, 0, NUM_BODIES*sizeof(float), dataMasses);
+    queue.enqueueFillBuffer(dPositions, 0, NUM_BODIES*sizeof(float3), paddedBodies * sizeof(float3));
+    queue.enqueueFillBuffer(dVelocities, 0, NUM_BODIES*sizeof(float3), paddedBodies * sizeof(float3));
+    queue.enqueueFillBuffer(dMasses, 0, NUM_BODIES*sizeof(float), paddedBodies * sizeof(float));
+    queue.finish();
+    //dPositions = cl::Buffer(context, dataPositions, dataPositions+3*NUM_BODIES, false);
+    //dVelocities = cl::Buffer(context, dataVelocities, dataVelocities+3*NUM_BODIES, false);
+    //dMasses = cl::Buffer(context, dataMasses, dataMasses+NUM_BODIES, true);
+
 }
 
 // Creates the VBO and binds it to a CUDA resource
@@ -153,29 +177,28 @@ void initGL()
 
 void runSimulation() {  // runOpenCl
     // Prepare the kernel
-    int nBodies = NUM_BODIES;
-    int numGroups = (NUM_BODIES + GROUP_SIZE - 1) / GROUP_SIZE;
-
-    cl::NDRange global(GROUP_SIZE * numGroups);  // Total number of work items
+    cl::NDRange global(clNumBodies);  // Total number of work items
     cl::NDRange local(GROUP_SIZE);  // Work items in each work-group
 
     nBodiesKernel.setArg(0, dVBO);
     nBodiesKernel.setArg(1, dPositions);
     nBodiesKernel.setArg(2, dVelocities);
     nBodiesKernel.setArg(3, dMasses);
-    nBodiesKernel.setArg(4, NUM_BODIES);
+    nBodiesKernel.setArg(4, GROUP_SIZE*sizeof(cl_float4), nullptr);  // tileData
+    nBodiesKernel.setArg(5, clNumBodies);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
     // Run the kernel
     nBodiesKernel();
     queue.finish();
 
-    // New VBO data
-    auto vboData = new float[nBodies * 8];
-    queue.enqueueReadBuffer(dVBO, CL_TRUE, 0, 8 * sizeof(float) * nBodies, vboData);
-
+    // New VBO data, only take the NUM_BODIES <= clNumBodies, ignoring the padded data
+    auto vboData = new float[NUM_BODIES * 8];
+    queue.enqueueReadBuffer(dVBO, CL_TRUE, 0, NUM_BODIES * 4 * sizeof(float), vboData);
+    queue.enqueueReadBuffer(dVBO, CL_TRUE, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), vboData + NUM_BODIES * 4);
+    queue.finish();
     // Update the VBO data
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, nBodies * 8 * sizeof(float), vboData);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, NUM_BODIES * 8 * sizeof(float), vboData);
 }
 
 void display()
