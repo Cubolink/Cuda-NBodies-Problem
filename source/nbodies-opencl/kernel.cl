@@ -3,7 +3,7 @@
 // =================================
 
 #pragma OPENCL EXTENSION cl_khr_fp64: enable
-float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
+float3 bodyBodyInteraction(float3 iBody, float4 jBody, float3 ai)
 {
     float3 r = {};
     r.x = jBody.x - iBody.x;
@@ -16,7 +16,7 @@ float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 
     if (distCube < 1.f) return ai;
 
-    float s = jMass / distCube;
+    float s = jBody.w / distCube;
 
     ai.x += r.x * s;
     ai.y += r.y * s;
@@ -56,8 +56,7 @@ __kernel void nBodiesKernel(
         // Each thread computes the acceleration of its body inteacting with all bodies in the tile
         for (int k = 0; k < get_local_size(0); k++)
         {
-            float3 kPosition = {tileData[k].x, tileData[k].y, tileData[k].z};
-            acceleration = bodyBodyInteraction(position, kPosition, tileData[k].w, acceleration);
+            acceleration = bodyBodyInteraction(position, tileData[k], acceleration);
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
