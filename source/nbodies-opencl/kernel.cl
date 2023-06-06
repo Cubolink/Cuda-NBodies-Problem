@@ -32,24 +32,25 @@ __kernel void nBodiesKernel(
     __global float *masses,
     __local float4 *tileData,
     int nBodies) {
+
+    float dt = 0.001f;
+
     // Warning: float3 are 16-bit in openCL, ie: they are as float4.
     // This may complicate things
     int i = get_global_id(0);
     int local_i = get_local_id(0);
 
-    float dt = 0.001;
-    float3 position = {positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]};
-    float3 velocity = {velocities[3 * i], velocities[3 * i + 1], velocities[3 * i + 2]};
+    float3 position = vload3(i, positions);  // loads 12 bytes from positions[3 * i]
+    float3 velocity = vload3(i, velocities);  // {velocities[3 * i], velocities[3 * i + 1], velocities[3 * i + 2]};
     float3 acceleration = {.0f, .0f, .0f};
 
     for (int tile = 0; tile * get_local_size(0) < nBodies; tile++) {
         // Copy global to local memory, only one tile in an iteration
         // Each thread copy one part of the tile
         int j = tile * get_local_size(0) + get_local_id(0);
-        tileData[local_i].x = positions[3*j];
-        tileData[local_i].y = positions[3*j + 1];
-        tileData[local_i].z = positions[3*j + 2];
-        tileData[local_i].w = masses[j];
+
+        float3 jPosition = vload3(j, positions);
+        tileData[local_i] = (float4) {jPosition.x, jPosition.y, jPosition.z, masses[j]};
 
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -74,24 +75,13 @@ __kernel void nBodiesKernel(
     position.z += velocity.z * dt;
 
     // Update particles data
-    positions[3*i + 0] = position.x;
-    positions[3*i + 1] = position.y;
-    positions[3*i + 2] = position.z;
-    velocities[3*i + 0] = velocity.x;
-    velocities[3*i + 1] = velocity.y;
-    velocities[3*i + 2] = velocity.z;
+    vstore3(position, i, positions);  // stores the 12 bytes from position into positions[3*i]
+    vstore3(velocity, i, velocities);  // stores the 12 bytes from velocity into velocities[3*i]
 
     // Update VBO
     int positionIndex = i;
     int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
-    pvbo[positionIndex].x = position.x;
-    pvbo[positionIndex].y = position.y;
-    pvbo[positionIndex].z = position.z;
-    pvbo[positionIndex].w = 1.f;
-
-    pvbo[velocityIndex].x = velocity.x;
-    pvbo[velocityIndex].y = velocity.y;
-    pvbo[velocityIndex].z = velocity.z;
-    pvbo[velocityIndex].w = 1.f;
+    pvbo[positionIndex] = (float4) {position.x, position.y, position.z, 1.f};
+    pvbo[velocityIndex] = (float4) {velocity.x, velocity.y, velocity.z, 1.f};
 
 }
