@@ -24,12 +24,13 @@
 #include "data-loader.h"
 #include "framerate.h"
 #include "particle-renderer.h"
+#include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 16384
+#define NUM_BODIES 4096
 
 // Block size
-#define BLOCK_SIZE 251
+#define BLOCK_SIZE 256
 
 // Number of CUDA blocks
 int numBlocks;
@@ -59,8 +60,11 @@ float* dFutureVelocities = nullptr; // Device side particles future velocities
 float* dMasses = nullptr; // Device side particles masses
 
 // GL drawing attributes
-ParticleRenderer* renderer = nullptr;
 float	spriteSize = scaleFactor * 0.25f;
+ParticleRenderer* renderer = nullptr;
+
+// Timer
+ParticleTimer* particleTimer;
 
 // Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
@@ -89,6 +93,8 @@ void initCUDA()
 
 	// Number of particles after padding, if there exists padding
 	numBodies = numBlocks * BLOCK_SIZE;
+
+	particleTimer = new ParticleTimer(numBodies);
 
 	hPositions = new float[numBodies * 3];
 	hVelocities = new float[numBodies * 3];
@@ -182,8 +188,8 @@ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* 
 
 	float3 acceleration = {.0f, .0f, .0f};
 
-	int j, k, tile;
-	for (j = 0, tile = 0; j < bodies; j += BLOCK_SIZE, tile++) {    
+	int k, tile;
+	for (tile = 0; tile * BLOCK_SIZE < bodies; tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
@@ -228,8 +234,15 @@ void runCuda(void)
 	size_t numBytes;
   cudaGraphicsResourceGetMappedPointer((void**) &dptr, &numBytes, cudaVBOResource);
 
+	// Start timer iteration
+	particleTimer->startIteration();
+
 	// Run the kernel
 	nBodiesKernel<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+
+	// End timer iteration
+	particleTimer->endIteration(); 
+	particleTimer->printParticleEvaluatedPerSecond();
 
 	// Update positions and velocities for next iteration
 	cudaMemcpy(dPositions, dFuturePositions, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);

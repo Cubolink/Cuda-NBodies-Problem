@@ -9,6 +9,7 @@
 #include <cmath>
 #include <GL/glew.h>
 #include "data-structs.h"
+#include "particle-timer.h"
 
 float3 bodyBodyInteraction(float3 iBody, float3 jBody, float jMass, float3 ai)
 {
@@ -66,14 +67,19 @@ void nBodiesKernel(int i, float3 *dataPositions, float3 *dataVelocities, float *
  * @param pdata
  * @param nBodies
  */
-void cpuComputeNBodies(float3 *dataPositions, float3 *dataVelocities, float *dataMasses, GLuint vbo, int nBodies)
+void cpuComputeNBodies(float3 *dataPositions, float3 *dataVelocities, float *dataMasses, GLuint vbo, int nBodies, ParticleTimer* timer)
 {
+    // Start timer iteration
+    timer->startIteration(); 
 
     // For each body, updates its position and velocity
     for (int i = 0; i < nBodies; i++) {
-        // std::cout << i << "/" << nBodies << std::endl;
         nBodiesKernel(i, dataPositions, dataVelocities, dataMasses, nBodies);
     }
+
+    // End timer iteration
+    timer->endIteration(); 
+    timer->printParticleEvaluatedPerSecond();
 
     // New VBO data
     auto vboData = new float[nBodies * 8];

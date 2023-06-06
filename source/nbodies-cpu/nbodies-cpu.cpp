@@ -15,10 +15,11 @@
 #include "data-structs.h"
 #include "framerate.h"
 #include "particle-renderer.h"
+#include "particle-timer.h"
 #include "simulation.h"
 
 // Number of particles to be rendered
-#define NUM_BODIES 1024
+#define NUM_BODIES 4096
 
 // Simulation parameters
 float scaleFactor = 1.5f;
@@ -30,6 +31,7 @@ float *dataMasses = nullptr;
 
 GLuint VBO = 0;
 ParticleRenderer* renderer = nullptr;
+ParticleTimer* timer = new ParticleTimer(NUM_BODIES);
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // Creates the VBO and binds it to a CUDA resource
@@ -82,7 +84,7 @@ void initGL()
 // ====================================
 void display()
 {
-	cpuComputeNBodies(dataPositions, dataVelocities, dataMasses, VBO, NUM_BODIES);
+	cpuComputeNBodies(dataPositions, dataVelocities, dataMasses, VBO, NUM_BODIES, timer);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
