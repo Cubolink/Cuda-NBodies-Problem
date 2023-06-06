@@ -29,6 +29,8 @@ __kernel void nBodiesKernel(
     __global float4 *pvbo,
     __global float *positions,
     __global float *velocities,
+    __global float *futurePositions,
+    __global float *futureVelocities,
     __global float *masses,
     __local float4 *tileData,
     int nBodies) {
@@ -75,8 +77,8 @@ __kernel void nBodiesKernel(
     position.z += velocity.z * dt;
 
     // Update particles data
-    vstore3(position, i, positions);  // stores the 12 bytes from position into positions[3*i]
-    vstore3(velocity, i, velocities);  // stores the 12 bytes from velocity into velocities[3*i]
+    vstore3(position, i, futurePositions);  // stores the 12 bytes from position into positions[3*i]
+    vstore3(velocity, i, futureVelocities);  // stores the 12 bytes from velocity into velocities[3*i]
 
     // Update VBO
     int positionIndex = i;
