@@ -48,6 +48,8 @@ float* dataMasses = nullptr;
 // Device side data buffers
 cl::Buffer dPositions;
 cl::Buffer dVelocities;
+cl::Buffer dFuturePositions;
+cl::Buffer dFutureVelocities;
 cl::Buffer dMasses;
 cl::Buffer dVBO;
 // OpenCL stuff
@@ -113,6 +115,8 @@ void initOpenCL() {
     // Init device data, copying data from host for positions, velocities and masses
     dPositions = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
     dVelocities = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
+    dFuturePositions = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
+    dFutureVelocities = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
     dMasses = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float));
     dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * clNumBodies);
 
@@ -183,13 +187,19 @@ void runSimulation() {  // runOpenCl
     nBodiesKernel.setArg(0, dVBO);
     nBodiesKernel.setArg(1, dPositions);
     nBodiesKernel.setArg(2, dVelocities);
-    nBodiesKernel.setArg(3, dMasses);
-    nBodiesKernel.setArg(4, GROUP_SIZE*sizeof(cl_float4), nullptr);  // tileData
-    nBodiesKernel.setArg(5, clNumBodies);
+    nBodiesKernel.setArg(3, dFuturePositions);
+    nBodiesKernel.setArg(4, dFutureVelocities);
+    nBodiesKernel.setArg(5, dMasses);
+    nBodiesKernel.setArg(6, GROUP_SIZE*sizeof(cl_float4), nullptr);  // tileData
+    nBodiesKernel.setArg(7, clNumBodies);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
     // Run the kernel
     nBodiesKernel();
     queue.finish();
+
+    // Update positions and velocities for next iteration
+    queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
+    queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
 
     // New VBO data, only take the NUM_BODIES <= clNumBodies, ignoring the padded data
     auto vboData = new float[NUM_BODIES * 8];
