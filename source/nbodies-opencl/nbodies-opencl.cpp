@@ -211,15 +211,8 @@ void runSimulation() {  // runOpenCl
     queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
     queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
 
-    // New VBO data, only take the NUM_BODIES <= clNumBodies, ignoring the padded data
-    auto vboData = new float[NUM_BODIES * 8];
-    queue.enqueueReadBuffer(dVBO, CL_TRUE, 0, NUM_BODIES * 4 * sizeof(float), vboData);
-    queue.enqueueReadBuffer(dVBO, CL_TRUE, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), vboData + NUM_BODIES * 4);
-    queue.finish();
-    // Update the VBO data
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    // glBufferSubData(GL_ARRAY_BUFFER, 0, NUM_BODIES * 8 * sizeof(float), vboData);
     /// Update the VBO data
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glFinish();
     std::vector<cl::Memory> objs;
     objs.clear();
