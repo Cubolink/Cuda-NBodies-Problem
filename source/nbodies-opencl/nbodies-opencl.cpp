@@ -218,20 +218,15 @@ void runSimulation() {  // runOpenCl
     objs.clear();
     objs.push_back(dGLVBO);
     // Flush opengl commands and wait for object acquisition
-    cl::Event ev;
-    cl_int res = queue.enqueueAcquireGLObjects(&objs, nullptr, &ev);
-    ev.wait();
-    if (res!=CL_SUCCESS) {
-        std::cout << "Failed acquiring GL object: " << res << std::endl;
+    if (queue.enqueueAcquireGLObjects(&objs, nullptr, nullptr) != CL_SUCCESS) {
+        std::cout << "Failed acquiring GL object." << std::endl;
         exit(248);
     }
     // Only take the NUM_BODIES <= clNumBodies, ignoring the padded data, so this takes two copies instead of one
     queue.enqueueCopyBuffer(dVBO, dGLVBO, 0, 0, 4 * sizeof(float) * NUM_BODIES);
     queue.enqueueCopyBuffer(dVBO, dGLVBO, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float));
-    res = queue.enqueueReleaseGLObjects(&objs);
-    ev.wait();
-    if (res != CL_SUCCESS) {
-        std::cout << "Failed releasing GL object: " << res << std::endl;
+    if (queue.enqueueReleaseGLObjects(&objs) != CL_SUCCESS) {
+        std::cout << "Failed releasing GL object." << std::endl;
         exit(247);
     }
     queue.finish();
