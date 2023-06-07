@@ -29,6 +29,9 @@ float3 *dataPositions = nullptr;
 float3 *dataVelocities = nullptr;
 float *dataMasses = nullptr;
 
+float3 *futurePositions = nullptr;
+float3 *futureVelocities = nullptr;
+
 GLuint VBO = 0;
 ParticleRenderer* renderer = nullptr;
 ParticleTimer* timer = new ParticleTimer(NUM_BODIES);
@@ -84,7 +87,7 @@ void initGL()
 // ====================================
 void display()
 {
-	cpuComputeNBodies(dataPositions, dataVelocities, dataMasses, VBO, NUM_BODIES, timer);
+	cpuComputeNBodies(dataPositions, dataVelocities, dataMasses, futurePositions, futureVelocities, NUM_BODIES, VBO, timer);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -173,6 +176,10 @@ int main(int argc, char** argv)
 	dataVelocities = new float3[NUM_BODIES];
 	dataMasses = new float[NUM_BODIES];
 	loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
+
+	// Locate data for future positions and velocities
+	futurePositions = new float3[NUM_BODIES];
+	futureVelocities = new float3[NUM_BODIES];
 
 	// Create app window
 	glutInit(&argc, argv);
