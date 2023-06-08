@@ -154,6 +154,10 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 			exit(0);
 			break;
+        case 'c':
+            std::cout << "Exporting" << std::endl;
+            timer->exportData("data/");
+            break;
 		default:
 			break;
 	}

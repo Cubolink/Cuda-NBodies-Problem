@@ -6,6 +6,9 @@
 #define __PARTICLETIMER_H__
 
 #include <chrono>
+#include <iostream>
+#include <map>
+#include <vector>
 
 class ParticleTimer
 {
@@ -14,6 +17,7 @@ public:
     void startIteration();
     void endIteration();
     void printParticleEvaluatedPerSecond();
+    void exportData(const std::string &folder);
 
 protected: // Data
     int m_numParticles;
@@ -21,6 +25,7 @@ protected: // Data
     std::chrono::high_resolution_clock::time_point m_endTime;
     double m_totalElapsedTime;
     int m_iterationCount;
+    std::map<std::string,std::vector<std::pair<double, double>>> store;  // store['example-timer'][0] = (t0, value)
 };
 
 #endif

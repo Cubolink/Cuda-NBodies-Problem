@@ -26,6 +26,7 @@
 #include "data-loader.h"
 #include "framerate.h"
 #include "particle-renderer.h"
+#include "particle-timer.h"
 
 struct float3
 {
@@ -65,6 +66,8 @@ GLuint VBO = 0;
 ParticleRenderer* renderer = nullptr;
 float	spriteSize = scaleFactor * 0.25f;
 
+ParticleTimer* particleTimer;
+
 // Controller
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
@@ -101,6 +104,8 @@ void initOpenCL() {
     // Number of particles. If clNumGroups was rounded, then there's padding and clNumBodies > NUM_BODIES
     clNumBodies = clNumGroups * GROUP_SIZE;
     int paddedBodies = (clNumBodies - NUM_BODIES);
+
+    particleTimer = new ParticleTimer(clNumBodies);
 
     // create a context
     cl::Platform clPlatform = cl::Platform::getDefault();
@@ -203,9 +208,12 @@ void runSimulation() {  // runOpenCl
     nBodiesKernel.setArg(6, GROUP_SIZE*sizeof(cl_float4), nullptr);  // tileData
     nBodiesKernel.setArg(7, clNumBodies);
     queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
-    // Run the kernel
+    // Start timer iteration and run the kernel
+    particleTimer->startIteration();
     nBodiesKernel();
     queue.finish();
+    particleTimer->endIteration();
+    particleTimer->printParticleEvaluatedPerSecond();
 
     // Update positions and velocities for next iteration
     queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
@@ -304,6 +312,10 @@ void key(unsigned char key, int x, int y)
         case '\033':
         case 'q':
             exit(0);
+            break;
+        case 'c':
+            std::cout << "Exporting" << std::endl;
+            particleTimer->exportData("data/");
             break;
         default:
             break;
