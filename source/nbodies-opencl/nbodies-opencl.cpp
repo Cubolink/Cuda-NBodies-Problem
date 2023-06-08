@@ -52,6 +52,8 @@ cl::Buffer dFuturePositions;
 cl::Buffer dFutureVelocities;
 cl::Buffer dMasses;
 cl::Buffer dVBO;
+cl::BufferGL dGLVBO;
+
 // OpenCL stuff
 cl::CommandQueue queue;
 cl::Program program;
@@ -101,7 +103,14 @@ void initOpenCL() {
     int paddedBodies = (clNumBodies - NUM_BODIES);
 
     // create a context
-    context = cl::Context(DEVICE);
+    cl::Platform clPlatform = cl::Platform::getDefault();
+    cl_context_properties properties[] = {
+            CL_GL_CONTEXT_KHR, (cl_context_properties) wglGetCurrentContext(),
+            CL_WGL_HDC_KHR, (cl_context_properties) wglGetCurrentDC(),
+            CL_CONTEXT_PLATFORM, (cl_context_properties) clPlatform(),
+            0
+    };
+    context = cl::Context(DEVICE, properties);
 
     // get the command queue
     queue = cl::CommandQueue(context);
@@ -119,6 +128,7 @@ void initOpenCL() {
     dFutureVelocities = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
     dMasses = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float));
     dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * clNumBodies);
+    dGLVBO = cl::BufferGL(context, CL_MEM_READ_WRITE, VBO);
 
     queue.enqueueWriteBuffer(dPositions, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataPositions);
     queue.enqueueWriteBuffer(dVelocities, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataVelocities);
@@ -201,14 +211,26 @@ void runSimulation() {  // runOpenCl
     queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
     queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
 
-    // New VBO data, only take the NUM_BODIES <= clNumBodies, ignoring the padded data
-    auto vboData = new float[NUM_BODIES * 8];
-    queue.enqueueReadBuffer(dVBO, CL_TRUE, 0, NUM_BODIES * 4 * sizeof(float), vboData);
-    queue.enqueueReadBuffer(dVBO, CL_TRUE, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), vboData + NUM_BODIES * 4);
-    queue.finish();
-    // Update the VBO data
+    /// Update the VBO data
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, NUM_BODIES * 8 * sizeof(float), vboData);
+    glFinish();
+    std::vector<cl::Memory> objs;
+    objs.clear();
+    objs.push_back(dGLVBO);
+    // Flush opengl commands and wait for object acquisition
+    if (queue.enqueueAcquireGLObjects(&objs, nullptr, nullptr) != CL_SUCCESS) {
+        std::cout << "Failed acquiring GL object." << std::endl;
+        exit(248);
+    }
+    // Only take the NUM_BODIES <= clNumBodies, ignoring the padded data, so this takes two copies instead of one
+    queue.enqueueCopyBuffer(dVBO, dGLVBO, 0, 0, 4 * sizeof(float) * NUM_BODIES);
+    queue.enqueueCopyBuffer(dVBO, dGLVBO, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float));
+    if (queue.enqueueReleaseGLObjects(&objs) != CL_SUCCESS) {
+        std::cout << "Failed releasing GL object." << std::endl;
+        exit(247);
+    }
+    queue.finish();
+
 }
 
 void display()
@@ -304,9 +326,6 @@ int main(int argc, char** argv)
     dataMasses = new float[NUM_BODIES];
     loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
-    // OpenCL setup
-    initOpenCL();
-
     // Crete app window
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
@@ -317,6 +336,10 @@ int main(int argc, char** argv)
 
     // OpenGL setup
     initGL();
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    // OpenCL setup
+    initOpenCL();
 
     // GL callback functions
     glutDisplayFunc(display);
