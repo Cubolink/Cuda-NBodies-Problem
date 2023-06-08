@@ -12,6 +12,7 @@
 ParticleTimer::ParticleTimer(int nParticles)
 : m_numParticles(nParticles),
   m_totalElapsedTime(0.0),
+  m_secondElapsedTime(0.0),
   m_iterationCount(0)
 {
 }
@@ -26,11 +27,18 @@ void ParticleTimer::endIteration()
     m_endTime = std::chrono::high_resolution_clock::now();
     double elapsedTime = std::chrono::duration<double>(m_endTime - m_startTime).count();
     m_totalElapsedTime += elapsedTime;
+    m_secondElapsedTime += elapsedTime;
     m_iterationCount++;
 
-    double averageElapsedTime = m_totalElapsedTime / m_iterationCount;
-    store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
-    store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, m_numParticles / averageElapsedTime));
+    if (m_secondElapsedTime > 1.0)
+    {
+        m_secondElapsedTime = 0.0;
+        double averageElapsedTime = m_totalElapsedTime / m_iterationCount;
+        double particlesPerSecond = m_numParticles / averageElapsedTime;
+
+        store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
+        store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, particlesPerSecond));
+    }
 }
 
 void ParticleTimer::printParticleEvaluatedPerSecond()
