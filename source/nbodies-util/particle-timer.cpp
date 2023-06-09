@@ -12,7 +12,8 @@
 ParticleTimer::ParticleTimer(int nParticles)
 : m_numParticles(nParticles),
   m_totalElapsedTime(0.0),
-  m_iterationCount(0)
+  m_iterationCount(0),
+  m_dataExported(false)
 {
 }
 
@@ -23,18 +24,25 @@ void ParticleTimer::startIteration()
 
 void ParticleTimer::endIteration()
 {
-    if (m_iterationCount > 99)
+    if (m_iterationCount >= 100 && !m_dataExported) {
+        exportData("data/");
+        m_dataExported = true;
         return;
+    } else if (m_dataExported) {
+        return;
+    }
+        
     m_endTime = std::chrono::high_resolution_clock::now();
     double elapsedTime = std::chrono::duration<double>(m_endTime - m_startTime).count();
     m_totalElapsedTime += elapsedTime;
     m_iterationCount++;
 
-    store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
     double particlesPerSecond = m_numParticles / elapsedTime;
+
+    store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
     store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, particlesPerSecond));
 
-    std::cout << "Speed (Particles per second): " << particlesPerSecond << std::endl;
+    std::cout << "Speed " << m_iterationCount - 1 << " (Particles per second): " << particlesPerSecond << std::endl;
 }
 
 void ParticleTimer::exportData(const std::string &folderPath) {

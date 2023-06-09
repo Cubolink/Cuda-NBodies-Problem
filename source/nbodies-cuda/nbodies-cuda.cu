@@ -379,9 +379,6 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 				exit(0);
 				break;
-		case 'c':
-			particleTimer->exportData("data/");
-			break;
 		case '=': // Increase sprite size
 			spriteSize += scaleFactor*0.02f;
 			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);

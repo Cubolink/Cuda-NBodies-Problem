@@ -25,6 +25,7 @@ protected: // Data
     double m_totalElapsedTime;
     int m_iterationCount;
     std::map<std::string,std::vector<std::pair<double, double>>> store;  // store['example-timer'][0] = (t0, value)
+    bool m_dataExported;
 };
 
 #endif
