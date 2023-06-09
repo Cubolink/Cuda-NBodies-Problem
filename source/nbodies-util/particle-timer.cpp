@@ -9,11 +9,12 @@
 #include <fstream>
 #include <filesystem>
 
-ParticleTimer::ParticleTimer(int nParticles)
+ParticleTimer::ParticleTimer(int nParticles, const std::string &dataFolderName)
 : m_numParticles(nParticles),
   m_totalElapsedTime(0.0),
   m_iterationCount(0),
-  m_dataExported(false)
+  m_dataExported(false),
+  m_dataFolderName(dataFolderName)
 {
 }
 
@@ -25,7 +26,7 @@ void ParticleTimer::startIteration()
 void ParticleTimer::endIteration()
 {
     if (m_iterationCount >= 100 && !m_dataExported) {
-        exportData("data/");
+        exportData("data-" + m_dataFolderName + "/");
         m_dataExported = true;
         return;
     } else if (m_dataExported) {
@@ -40,7 +41,7 @@ void ParticleTimer::endIteration()
     double particlesPerSecond = m_numParticles / elapsedTime;
 
     store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
-    store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, particlesPerSecond));
+    store["particles-per-second"].push_back(std::make_pair(m_totalElapsedTime, particlesPerSecond));
 
     std::cout << "Speed " << m_iterationCount - 1 << " (Particles per second): " << particlesPerSecond << std::endl;
 }

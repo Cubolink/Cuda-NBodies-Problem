@@ -31,8 +31,8 @@
 #define BLOCK_SIZE 256
 
 // Block dimension
-// #define GLOBAL_MEMORY
-#define LOCAL_MEMORY
+#define GLOBAL_MEMORY
+// #define LOCAL_MEMORY
 
 // Memory configuration
 #define ONE_DIM_BLOCK
@@ -100,7 +100,16 @@ void initCUDA()
 	// Number of particles after padding, if there exists padding
 	numBodies = numBlocks * BLOCK_SIZE;
 
-	particleTimer = new ParticleTimer(numBodies);
+	// Run the kernel
+	#ifdef GLOBAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+				particleTimer = new ParticleTimer(numBodies, "global-1d");
+			#endif
+	#elif defined LOCAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+				particleTimer = new ParticleTimer(numBodies, "local-1d");
+			#endif
+	#endif
 
 	hPositions = new float[numBodies * 3];
 	hVelocities = new float[numBodies * 3];

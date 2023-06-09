@@ -13,7 +13,7 @@
 class ParticleTimer
 {
 public:
-    ParticleTimer(int nParticles);
+    ParticleTimer(int nParticles, const std::string &dataFoldername);
     void startIteration();
     void endIteration();
     void exportData(const std::string &folder);
@@ -25,6 +25,7 @@ protected: // Data
     double m_totalElapsedTime;
     int m_iterationCount;
     std::map<std::string,std::vector<std::pair<double, double>>> store;  // store['example-timer'][0] = (t0, value)
+    std::string m_dataFolderName;
     bool m_dataExported;
 };
 
