@@ -16,7 +16,6 @@ public:
     ParticleTimer(int nParticles);
     void startIteration();
     void endIteration();
-    void printParticleEvaluatedPerSecond();
     void exportData(const std::string &folder);
 
 protected: // Data
@@ -24,7 +23,6 @@ protected: // Data
     std::chrono::high_resolution_clock::time_point m_startTime;
     std::chrono::high_resolution_clock::time_point m_endTime;
     double m_totalElapsedTime;
-    double m_secondElapsedTime;
     int m_iterationCount;
     std::map<std::string,std::vector<std::pair<double, double>>> store;  // store['example-timer'][0] = (t0, value)
 };

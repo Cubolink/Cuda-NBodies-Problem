@@ -239,10 +239,9 @@ void runCuda(void)
 
 	// Run the kernel
 	nBodiesKernel<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
-
+    cudaDeviceSynchronize();
 	// End timer iteration
-	particleTimer->endIteration(); 
-	particleTimer->printParticleEvaluatedPerSecond();
+	particleTimer->endIteration();
 
 	// Update positions and velocities for next iteration
 	cudaMemcpy(dPositions, dFuturePositions, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
