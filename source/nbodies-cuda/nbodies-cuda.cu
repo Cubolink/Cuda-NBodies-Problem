@@ -28,11 +28,11 @@
 #define NUM_BODIES 16384
 
 // Block size
-#define BLOCK_SIZE 2
+#define BLOCK_SIZE 256
 
 // Block dimension
-#define GLOBAL_MEMORY
-// #define LOCAL_MEMORY
+// #define GLOBAL_MEMORY
+#define LOCAL_MEMORY
 
 // Memory configuration
 #define ONE_DIM_BLOCK
@@ -229,7 +229,7 @@ void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, f
 	float3 acceleration = {.0f, .0f, .0f};
 
 	int k, tile;
-	for (tile = 0; tile * BLOCK_SIZE < bodies; tile++) {    
+	for (tile = 0; tile * blockDim.x < bodies; tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
