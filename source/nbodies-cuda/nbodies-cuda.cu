@@ -364,7 +364,7 @@ void nBodiesKernelLocal2D(float4* pvbo, float3* positions, float3* velocities, f
 
 		__syncthreads();     
 		
-		for (k = 0; k < blockDim.x; k++) {     
+		for (k = 0; k < blockDim.x * blockDim.y; k++) {     
 			acceleration = bodyBodyInteraction(position, tileData[k], acceleration);   
 		}
 
