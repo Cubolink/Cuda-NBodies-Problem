@@ -25,7 +25,7 @@
 #include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 16384
+#define NUM_BODIES 16127
 
 // Block size
 #define BLOCK_SIZE 256
@@ -95,6 +95,21 @@ void idle();
 void createVBO(GLuint* vbo);
 void deleteVBO(GLuint* vbo);
 
+// Utility function for grid dimensions calculation
+int closestDivisorToSquareRoot(int n) {
+	int sqrtN = std::sqrt(n);
+	int closestDivisor = 1;
+
+	for (int i = sqrtN; i >= 1; --i) {
+		if (n % i == 0) {
+			closestDivisor = i;
+			break;
+		}
+	}
+
+	return closestDivisor;
+}
+
 // Initialize CUDA data
 void initCUDA()
 {	
@@ -110,12 +125,12 @@ void initCUDA()
 		if (blockSide * blockSide != BLOCK_SIZE) {
 			std::cout << "BLOCK_SIZE has to be a perfect square" << std::endl;
 			exit(1);
-		} else if (numBlocks % blockSide != 0) {
-			std::cout << "NUM_BODIES has to be a multiple of of BLOCK_SIZE" << std::endl;
-			exit(1);
 		}
+
+		int gridSide = closestDivisorToSquareRoot(numBlocks);
+
 		blockSize.x = blockSide; blockSize.y = blockSide;
-		gridSize.x = blockSide; gridSize.y = numBlocks / blockSide;
+		gridSize.x = gridSide; gridSize.y = numBlocks / gridSide;
 	#endif
 
 	// Run the kernel
