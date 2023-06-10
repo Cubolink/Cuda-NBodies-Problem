@@ -213,7 +213,6 @@ void runSimulation() {  // runOpenCl
     nBodiesKernel();
     queue.finish();
     particleTimer->endIteration();
-    particleTimer->printParticleEvaluatedPerSecond();
 
     // Update positions and velocities for next iteration
     queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));

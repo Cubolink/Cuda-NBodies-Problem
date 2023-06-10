@@ -23,21 +23,18 @@ void ParticleTimer::startIteration()
 
 void ParticleTimer::endIteration()
 {
+    if (m_iterationCount > 99)
+        return;
     m_endTime = std::chrono::high_resolution_clock::now();
     double elapsedTime = std::chrono::duration<double>(m_endTime - m_startTime).count();
     m_totalElapsedTime += elapsedTime;
     m_iterationCount++;
 
-    double averageElapsedTime = m_totalElapsedTime / m_iterationCount;
     store["iterations"].push_back(std::make_pair(m_totalElapsedTime, m_iterationCount));
-    store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, m_numParticles / averageElapsedTime));
-}
+    double particlesPerSecond = m_numParticles / elapsedTime;
+    store["particles_per_second"].push_back(std::make_pair(m_totalElapsedTime, particlesPerSecond));
 
-void ParticleTimer::printParticleEvaluatedPerSecond()
-{
-    double averageElapsedTime = m_totalElapsedTime / m_iterationCount;
-    double particlesPerSecond = m_numParticles / averageElapsedTime;
-    std::cout << "Particles evaluated per second: " << particlesPerSecond << std::endl;
+    std::cout << "Speed (Particles per second): " << particlesPerSecond << std::endl;
 }
 
 void ParticleTimer::exportData(const std::string &folderPath) {

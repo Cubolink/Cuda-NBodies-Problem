@@ -78,8 +78,7 @@ void cpuComputeNBodies(float3 *positions, float3 *velocities, float *masses, flo
     }
 
     // End timer iteration
-    timer->endIteration(); 
-    timer->printParticleEvaluatedPerSecond();
+    timer->endIteration();
 
     // New VBO data
     auto vboData = new float[nBodies * 8];

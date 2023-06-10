@@ -239,10 +239,9 @@ void runCuda(void)
 
 	// Run the kernel
 	nBodiesKernel<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
-
+    cudaDeviceSynchronize();
 	// End timer iteration
-	particleTimer->endIteration(); 
-	particleTimer->printParticleEvaluatedPerSecond();
+	particleTimer->endIteration();
 
 	// Update positions and velocities for next iteration
 	cudaMemcpy(dPositions, dFuturePositions, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -333,10 +332,9 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 				exit(0);
 				break;
-        case 'c':
-            std::cout << "Exporting" << std::endl;
-            particleTimer->exportData("data/");
-            break;
+		case 'c':
+			particleTimer->exportData("data/");
+			break;
 		case '=': // Increase sprite size
 			spriteSize += scaleFactor*0.02f;
 			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);

@@ -16,7 +16,6 @@ public:
     ParticleTimer(int nParticles);
     void startIteration();
     void endIteration();
-    void printParticleEvaluatedPerSecond();
     void exportData(const std::string &folder);
 
 protected: // Data
