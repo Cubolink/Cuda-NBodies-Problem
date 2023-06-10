@@ -1,7 +1,6 @@
-/*
- * This code was modified from the NVIDIA CUDA examples
- * S. James Lee, 2008 Fall
- */
+// ==================================
+// Modified from NVIDIA CUDA examples
+// ==================================
 
 #include <GL/glew.h>
 
@@ -15,7 +14,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
-#include <assert.h>
 #include <math.h>
 #include <cuda_runtime_api.h>
 #include <cuda_gl_interop.h>
@@ -27,12 +25,20 @@
 #include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 4096
+#define NUM_BODIES 16384
 
 // Block size
 #define BLOCK_SIZE 256
 
-// Number of CUDA blocks
+// Block dimension
+#define GLOBAL_MEMORY
+// #define LOCAL_MEMORY
+
+// Memory configuration
+#define ONE_DIM_BLOCK
+// #define TWO_DIM_BLOCK
+
+// Number of CUDA blocks after padding
 int numBlocks;
 
 // Number of particles after padding, if there exists padding
@@ -74,14 +80,14 @@ Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // Forward declarations
 void initCUDA();
-void initGL(void);
-void runCuda(void);
-void display(void);
+void initGL();
+void runCuda();
+void display();
 void reshape(int w, int h);
 void mouse(int button, int state, int x, int y);
 void motion(int x, int y);
 void key(unsigned char key, int x, int y);
-void idle(void);
+void idle();
 void createVBO(GLuint* vbo);
 void deleteVBO(GLuint* vbo);
 
@@ -94,7 +100,16 @@ void initCUDA()
 	// Number of particles after padding, if there exists padding
 	numBodies = numBlocks * BLOCK_SIZE;
 
-	particleTimer = new ParticleTimer(numBodies);
+	// Run the kernel
+	#ifdef GLOBAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+				particleTimer = new ParticleTimer(numBodies, "global-1d");
+			#endif
+	#elif defined LOCAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+				particleTimer = new ParticleTimer(numBodies, "local-1d");
+			#endif
+	#endif
 
 	hPositions = new float[numBodies * 3];
 	hVelocities = new float[numBodies * 3];
@@ -147,7 +162,7 @@ void initGL(void)
 }
 
 // ========================================================================
-// Start CUDA loop code
+// Start CUDA code
 // ========================================================================
 
 __device__
@@ -174,22 +189,56 @@ float3 bodyBodyInteraction(float3 iBody, float4 jData, float3 ai)
 }
 
 __global__
-void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int bodies)
+void nBodiesKernelGlobal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
-	__shared__ float4 tileData[BLOCK_SIZE];
-
 	float dt = 0.001f;
 
-	// Index of my body	
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	
 	float3 position = positions[x];
 	float3 velocity = velocities[x];
+	float3 acceleration = {.0f, .0f, .0f};
 
+  int j;
+  for (j = 0; j < nBodies; j++) {
+    float3 jPosition = positions[j];
+    float4 jData = make_float4(jPosition.x, jPosition.y, jPosition.z, masses[j]);
+    acceleration = bodyBodyInteraction(position, jData, acceleration);
+  }
+
+	velocity.x += acceleration.x * dt;
+	velocity.y += acceleration.y * dt;
+	velocity.z += acceleration.z * dt;
+
+	position.x += velocity.x * dt;
+	position.y += velocity.y * dt;
+	position.z += velocity.z * dt;
+
+	futurePositions[x] = position;
+	futureVelocities[x] = velocity;
+
+	int positionIndex = x;
+	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
+
+	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
+	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
+}
+
+__global__
+void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int bodies)
+{
+	extern __shared__ float4 tileData[];
+
+	float dt = 0.001f;
+
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	float3 position = positions[x];
+	float3 velocity = velocities[x];
 	float3 acceleration = {.0f, .0f, .0f};
 
 	int k, tile;
-	for (tile = 0; tile * BLOCK_SIZE < bodies; tile++) {    
+	for (tile = 0; tile * blockDim.x < bodies; tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
@@ -204,24 +253,20 @@ void nBodiesKernel(float4* pvbo, float3* positions, float3* velocities, float3* 
 		__syncthreads();   
 	}
 
-	// Update velocity
 	velocity.x += acceleration.x * dt;
 	velocity.y += acceleration.y * dt;
 	velocity.z += acceleration.z * dt;
 
-	// Update position
 	position.x += velocity.x * dt;
 	position.y += velocity.y * dt;
 	position.z += velocity.z * dt;
 
-	int positionIndex = x;
-	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
-
-  // Update device memory
 	futurePositions[x] = position;
 	futureVelocities[x] = velocity;
 
-	// Update VBO
+	int positionIndex = x;
+	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
+
 	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
 	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
@@ -238,8 +283,19 @@ void runCuda(void)
 	particleTimer->startIteration();
 
 	// Run the kernel
-	nBodiesKernel<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
-    cudaDeviceSynchronize();
+	#ifdef GLOBAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+					nBodiesKernelGlobal1D<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+			#endif
+	#elif defined LOCAL_MEMORY
+			#ifdef ONE_DIM_BLOCK
+					nBodiesKernelLocal1D<<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+			#endif
+	#endif
+
+	// Synchronize the device with host
+	cudaDeviceSynchronize();
+
 	// End timer iteration
 	particleTimer->endIteration();
 
@@ -252,7 +308,7 @@ void runCuda(void)
 }
 
 // ========================================================================
-// End CUDA loop code
+// End CUDA code
 // ========================================================================
 
 // Display function called in main loop
@@ -332,9 +388,6 @@ void key(unsigned char key, int x, int y)
 		case 'q':
 				exit(0);
 				break;
-		case 'c':
-			particleTimer->exportData("data/");
-			break;
 		case '=': // Increase sprite size
 			spriteSize += scaleFactor*0.02f;
 			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);
@@ -430,6 +483,5 @@ int main(int argc, char** argv)
 	free(hMasses);
 	delete renderer;
 	
-    return 0;
-
+  return 0;
 }

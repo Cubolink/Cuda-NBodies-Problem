@@ -105,7 +105,7 @@ void initOpenCL() {
     clNumBodies = clNumGroups * GROUP_SIZE;
     int paddedBodies = (clNumBodies - NUM_BODIES);
 
-    particleTimer = new ParticleTimer(clNumBodies);
+    particleTimer = new ParticleTimer(clNumBodies, "local-1d");
 
     // create a context
     cl::Platform clPlatform = cl::Platform::getDefault();
