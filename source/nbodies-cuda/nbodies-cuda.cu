@@ -25,24 +25,28 @@
 #include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 16384
+#define NUM_BODIES 16127
 
 // Block size
 #define BLOCK_SIZE 256
 
-// Block dimension
+// Memory configuration
 #define GLOBAL_MEMORY
 // #define LOCAL_MEMORY
 
-// Memory configuration
-#define ONE_DIM_BLOCK
-// #define TWO_DIM_BLOCK
+// Block configuration
+// #define ONE_DIM_BLOCK
+#define TWO_DIM_BLOCK
 
 // Number of CUDA blocks after padding
 int numBlocks;
 
-// Number of particles after padding, if there exists padding
+// Number of particles after padding
 int numBodies;
+
+// 2D dimensions
+dim3 blockSize;
+dim3 gridSize;
 
 // Simulation parameters
 float scaleFactor = 1.5f;
@@ -67,7 +71,7 @@ float* dMasses = nullptr; // Device side particles masses
 
 // GL drawing attributes
 float	spriteSize = scaleFactor * 0.25f;
-ParticleRenderer* renderer = nullptr;
+ParticleRenderer* particleRenderer = nullptr;
 
 // Timer
 ParticleTimer* particleTimer;
@@ -91,6 +95,21 @@ void idle();
 void createVBO(GLuint* vbo);
 void deleteVBO(GLuint* vbo);
 
+// Utility function for grid dimensions calculation
+int closestDivisorToSquareRoot(int n) {
+	int sqrtN = std::sqrt(n);
+	int closestDivisor = 1;
+
+	for (int i = sqrtN; i >= 1; --i) {
+		if (n % i == 0) {
+			closestDivisor = i;
+			break;
+		}
+	}
+
+	return closestDivisor;
+}
+
 // Initialize CUDA data
 void initCUDA()
 {	
@@ -100,15 +119,33 @@ void initCUDA()
 	// Number of particles after padding, if there exists padding
 	numBodies = numBlocks * BLOCK_SIZE;
 
+	// 2D block calculations
+	#ifdef TWO_DIM_BLOCK
+		int blockSide = (int) sqrt(BLOCK_SIZE);
+		if (blockSide * blockSide != BLOCK_SIZE) {
+			std::cout << "BLOCK_SIZE has to be a perfect square" << std::endl;
+			exit(1);
+		}
+
+		int gridSide = closestDivisorToSquareRoot(numBlocks);
+
+		blockSize.x = blockSide; blockSize.y = blockSide;
+		gridSize.x = gridSide; gridSize.y = numBlocks / gridSide;
+	#endif
+
 	// Run the kernel
 	#ifdef GLOBAL_MEMORY
-			#ifdef ONE_DIM_BLOCK
-				particleTimer = new ParticleTimer(numBodies, "global-1d");
-			#endif
+		#ifdef ONE_DIM_BLOCK
+			particleTimer = new ParticleTimer(numBodies, "global-1d");
+		#else
+			particleTimer = new ParticleTimer(numBodies, "global-2d");
+		#endif
 	#elif defined LOCAL_MEMORY
-			#ifdef ONE_DIM_BLOCK
-				particleTimer = new ParticleTimer(numBodies, "local-1d");
-			#endif
+		#ifdef ONE_DIM_BLOCK
+			particleTimer = new ParticleTimer(numBodies, "local-1d");
+		#else
+			particleTimer = new ParticleTimer(numBodies, "local-2d");
+		#endif
 	#endif
 
 	hPositions = new float[numBodies * 3];
@@ -155,10 +192,10 @@ void initGL(void)
 
 	// Particle renderer initialization
 	createVBO((GLuint*) &VBO);
-	renderer = new ParticleRenderer(numBodies);
-	renderer->setVBO(VBO);
-	renderer->setSpriteSize(0.4f);
-	renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
+	particleRenderer = new ParticleRenderer(numBodies);
+	particleRenderer->setVBO(VBO);
+	particleRenderer->setSpriteSize(0.4f);
+	particleRenderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
 }
 
 // ========================================================================
@@ -225,7 +262,49 @@ void nBodiesKernelGlobal1D(float4* pvbo, float3* positions, float3* velocities, 
 }
 
 __global__
-void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int bodies)
+void nBodiesKernelGlobal2D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+{
+	float dt = 0.001f;
+
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	int width = gridDim.x * blockDim.x;
+	int height = gridDim.y * blockDim.y;
+
+	unsigned int i = y * width + x;
+	
+	float3 position = positions[i];
+	float3 velocity = velocities[i];
+	float3 acceleration = {.0f, .0f, .0f};
+
+  int j;
+  for (j = 0; j < nBodies; j++) {
+    float3 jPosition = positions[j];
+    float4 jData = make_float4(jPosition.x, jPosition.y, jPosition.z, masses[j]);
+    acceleration = bodyBodyInteraction(position, jData, acceleration);
+  }
+
+	velocity.x += acceleration.x * dt;
+	velocity.y += acceleration.y * dt;
+	velocity.z += acceleration.z * dt;
+
+	position.x += velocity.x * dt;
+	position.y += velocity.y * dt;
+	position.z += velocity.z * dt;
+
+	futurePositions[i] = position;
+	futureVelocities[i] = velocity;
+
+	int positionIndex = i;
+	int velocityIndex = width * height + positionIndex;
+
+	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
+	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
+}
+
+__global__
+void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
 	extern __shared__ float4 tileData[];
 
@@ -238,7 +317,7 @@ void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, f
 	float3 acceleration = {.0f, .0f, .0f};
 
 	int k, tile;
-	for (tile = 0; tile * blockDim.x < bodies; tile++) {    
+	for (tile = 0; tile * blockDim.x < nBodies; tile++) {    
 		int idx = tile * blockDim.x + threadIdx.x;     
 
 		float3 jPosition = positions[idx];
@@ -271,6 +350,60 @@ void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, f
 	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
+__global__
+void nBodiesKernelLocal2D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+{
+	extern __shared__ float4 tileData[];
+
+	float dt = 0.001f;
+
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	int width = gridDim.x * blockDim.x;
+	int height = gridDim.y * blockDim.y;
+
+	unsigned int i = y * width + x;
+	
+	float3 position = positions[i];
+	float3 velocity = velocities[i];
+	float3 acceleration = {.0f, .0f, .0f};
+
+	int k, tile;
+	for (tile = 0; tile * blockDim.x * blockDim.y < nBodies; tile++) {
+		int localIdx = threadIdx.y * blockDim.x + threadIdx.x;
+		int idx = tile * blockDim.x * blockDim.y + localIdx;     
+
+		float3 jPosition = positions[idx];
+		tileData[localIdx] = make_float4(jPosition.x, jPosition.y, jPosition.z, masses[idx]);     
+
+		__syncthreads();     
+		
+		for (k = 0; k < blockDim.x * blockDim.y; k++) {     
+			acceleration = bodyBodyInteraction(position, tileData[k], acceleration);   
+		}
+
+		__syncthreads();   
+	}
+
+	velocity.x += acceleration.x * dt;
+	velocity.y += acceleration.y * dt;
+	velocity.z += acceleration.z * dt;
+
+	position.x += velocity.x * dt;
+	position.y += velocity.y * dt;
+	position.z += velocity.z * dt;
+
+	futurePositions[i] = position;
+	futureVelocities[i] = velocity;
+
+	int positionIndex = i;
+	int velocityIndex = width * height + positionIndex;
+
+	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
+	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
+}
+
 void runCuda(void)
 {
 	// Map OpenGL vertex buffer object for writing from CUDA
@@ -284,13 +417,17 @@ void runCuda(void)
 
 	// Run the kernel
 	#ifdef GLOBAL_MEMORY
-			#ifdef ONE_DIM_BLOCK
-					nBodiesKernelGlobal1D<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
-			#endif
+		#ifdef ONE_DIM_BLOCK
+			nBodiesKernelGlobal1D<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+		#else
+			nBodiesKernelGlobal2D<<<gridSize, blockSize>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+		#endif
 	#elif defined LOCAL_MEMORY
-			#ifdef ONE_DIM_BLOCK
-					nBodiesKernelLocal1D<<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
-			#endif
+		#ifdef ONE_DIM_BLOCK
+			nBodiesKernelLocal1D<<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+		#else
+			nBodiesKernelLocal2D<<<gridSize, blockSize, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);	
+		#endif
 	#endif
 
 	// Synchronize the device with host
@@ -333,8 +470,8 @@ void display(void)
 	glRotatef(cameraRotLag[1], 0.0, 1.0, 0.0);
 	
 	// Render bodies
-	renderer->setSpriteSize(spriteSize);
-	renderer->display();
+	particleRenderer->setSpriteSize(spriteSize);
+	particleRenderer->display();
 	
 	// Update FPS
 	framerateUpdate();
@@ -481,7 +618,8 @@ int main(int argc, char** argv)
 	free(hPositions);
 	free(hVelocities);
 	free(hMasses);
-	delete renderer;
-	
+	delete particleRenderer;
+	delete particleTimer;
+
   return 0;
 }
