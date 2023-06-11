@@ -2,41 +2,28 @@
 // Modified from NVIDIA CUDA examples
 // ==================================
 
-#include <GL/glew.h>
-
-#if defined(__APPLE__) || defined(MACOSX)
-#include <GLUT/glut.h>
-#else
-#include <GL/glut.h>
-#endif
-
-#include <param/paramgl.h>
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
 #include <math.h>
 #include <cuda_runtime_api.h>
-#include <cuda_gl_interop.h>
 
-#include "controller.h"
 #include "data-loader.h"
-#include "framerate.h"
-#include "particle-renderer.h"
 #include "particle-timer.h"
 
 // Number of particles to be loaded from file
-#define NUM_BODIES 16127
+#define NUM_BODIES 16384
 
 // Block size
 #define BLOCK_SIZE 256
 
 // Memory configuration
-#define GLOBAL_MEMORY
-// #define LOCAL_MEMORY
+// #define GLOBAL_MEMORY
+#define LOCAL_MEMORY
 
 // Block configuration
-// #define ONE_DIM_BLOCK
-#define TWO_DIM_BLOCK
+#define ONE_DIM_BLOCK
+// #define TWO_DIM_BLOCK
 
 // Number of CUDA blocks after padding
 int numBlocks;
@@ -56,9 +43,6 @@ float* dataPositions = nullptr;
 float* dataVelocities = nullptr;
 float* dataMasses = nullptr;
 
-GLuint VBO = 0; // OpenGL VBO
-struct cudaGraphicsResource *cudaVBOResource; // CUDA Graphics Resource pointer
-
 float* hPositions = nullptr;
 float* hVelocities = nullptr;
 float* hMasses = nullptr;
@@ -69,31 +53,15 @@ float* dFuturePositions = nullptr; // Device side particles future positions
 float* dFutureVelocities = nullptr; // Device side particles future velocities
 float* dMasses = nullptr; // Device side particles masses
 
-// GL drawing attributes
-float	spriteSize = scaleFactor * 0.25f;
-ParticleRenderer* particleRenderer = nullptr;
-
 // Timer
 ParticleTimer* particleTimer;
-
-// Controller
-Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // Clamp macro
 #define LIMIT(x,min,max) { if ((x)>(max)) (x)=(max); if ((x)<(min)) (x)=(min); }
 
 // Forward declarations
 void initCUDA();
-void initGL();
 void runCuda();
-void display();
-void reshape(int w, int h);
-void mouse(int button, int state, int x, int y);
-void motion(int x, int y);
-void key(unsigned char key, int x, int y);
-void idle();
-void createVBO(GLuint* vbo);
-void deleteVBO(GLuint* vbo);
 
 // Utility function for grid dimensions calculation
 int closestDivisorToSquareRoot(int n) {
@@ -174,30 +142,6 @@ void initCUDA()
 
 }
 
-// Initializes OpenGL
-void initGL(void)
-{
-	glewInit();
-	if (!glewIsSupported("GL_VERSION_2_0 "
-												"GL_VERSION_1_5 "
-												"GL_ARB_multitexture "
-												"GL_ARB_vertex_buffer_object")) 
-	{
-		fprintf(stderr, "Required OpenGL extensions missing.");
-		exit(-1);
-	}
-
-	glEnable(GL_DEPTH_TEST);
-	glClearColor(0.0, 0.0, 0.0, 1.0);
-
-	// Particle renderer initialization
-	createVBO((GLuint*) &VBO);
-	particleRenderer = new ParticleRenderer(numBodies);
-	particleRenderer->setVBO(VBO);
-	particleRenderer->setSpriteSize(0.4f);
-	particleRenderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
-}
-
 // ========================================================================
 // Start CUDA code
 // ========================================================================
@@ -226,7 +170,7 @@ float3 bodyBodyInteraction(float3 iBody, float4 jData, float3 ai)
 }
 
 __global__
-void nBodiesKernelGlobal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+void nBodiesKernelGlobal1D(float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
 	float dt = 0.001f;
 
@@ -253,16 +197,10 @@ void nBodiesKernelGlobal1D(float4* pvbo, float3* positions, float3* velocities, 
 
 	futurePositions[x] = position;
 	futureVelocities[x] = velocity;
-
-	int positionIndex = x;
-	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
-
-	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
-	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
 __global__
-void nBodiesKernelGlobal2D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+void nBodiesKernelGlobal2D(float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
 	float dt = 0.001f;
 
@@ -295,16 +233,10 @@ void nBodiesKernelGlobal2D(float4* pvbo, float3* positions, float3* velocities, 
 
 	futurePositions[i] = position;
 	futureVelocities[i] = velocity;
-
-	int positionIndex = i;
-	int velocityIndex = width * height + positionIndex;
-
-	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
-	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
 __global__
-void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+void nBodiesKernelLocal1D(float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
 	extern __shared__ float4 tileData[];
 
@@ -342,16 +274,10 @@ void nBodiesKernelLocal1D(float4* pvbo, float3* positions, float3* velocities, f
 
 	futurePositions[x] = position;
 	futureVelocities[x] = velocity;
-
-	int positionIndex = x;
-	int velocityIndex = gridDim.x * blockDim.x + positionIndex;
-
-	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
-	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
 __global__
-void nBodiesKernelLocal2D(float4* pvbo, float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
+void nBodiesKernelLocal2D(float3* positions, float3* velocities, float3* futurePositions, float3* futureVelocities, float* masses, int nBodies)
 {
 	extern __shared__ float4 tileData[];
 
@@ -396,37 +322,25 @@ void nBodiesKernelLocal2D(float4* pvbo, float3* positions, float3* velocities, f
 
 	futurePositions[i] = position;
 	futureVelocities[i] = velocity;
-
-	int positionIndex = i;
-	int velocityIndex = width * height + positionIndex;
-
-	pvbo[positionIndex] = make_float4(position.x, position.y, position.z, 1.0f);
-	pvbo[velocityIndex] = make_float4(velocity.x, velocity.y, velocity.z, 1.0f);
 }
 
 void runCuda(void)
 {
-	// Map OpenGL vertex buffer object for writing from CUDA
-	float4 *dptr;
-	cudaGraphicsMapResources(1, &cudaVBOResource, 0);
-	size_t numBytes;
-  cudaGraphicsResourceGetMappedPointer((void**) &dptr, &numBytes, cudaVBOResource);
-
 	// Start timer iteration
 	particleTimer->startIteration();
 
 	// Run the kernel
 	#ifdef GLOBAL_MEMORY
 		#ifdef ONE_DIM_BLOCK
-			nBodiesKernelGlobal1D<<<numBlocks, BLOCK_SIZE>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+			nBodiesKernelGlobal1D<<<numBlocks, BLOCK_SIZE>>>((float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
 		#else
-			nBodiesKernelGlobal2D<<<gridSize, blockSize>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+			nBodiesKernelGlobal2D<<<gridSize, blockSize>>>((float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
 		#endif
 	#elif defined LOCAL_MEMORY
 		#ifdef ONE_DIM_BLOCK
-			nBodiesKernelLocal1D<<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
+			nBodiesKernelLocal1D<<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float4)>>>((float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);
 		#else
-			nBodiesKernelLocal2D<<<gridSize, blockSize, BLOCK_SIZE * sizeof(float4)>>>(dptr, (float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);	
+			nBodiesKernelLocal2D<<<gridSize, blockSize, BLOCK_SIZE * sizeof(float4)>>>((float3*) dPositions, (float3*) dVelocities, (float3*) dFuturePositions, (float3*) dFutureVelocities, dMasses, numBodies);	
 		#endif
 	#endif
 
@@ -439,136 +353,11 @@ void runCuda(void)
 	// Update positions and velocities for next iteration
 	cudaMemcpy(dPositions, dFuturePositions, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
 	cudaMemcpy(dVelocities, dFutureVelocities, 3 * numBodies * sizeof(float), cudaMemcpyDeviceToDevice);
-
-	// Unmap vertex buffer object
-	cudaGraphicsUnmapResources(1, &cudaVBOResource, 0);
 }
 
 // ========================================================================
 // End CUDA code
 // ========================================================================
-
-// Display function called in main loop
-void display(void)
-{
-	// Update simulation
-	runCuda();
-
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);  
-
-	// View transform
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	controller->updateCameraProperties();
-
-	float* cameraTransLag = controller->getCameraTransLag();
-	float* cameraRotLag = controller->getCameraRotLag();
-
-	glTranslatef(cameraTransLag[0], cameraTransLag[1], cameraTransLag[2]);
-	glRotatef(cameraRotLag[0], 1.0, 0.0, 0.0);
-	glRotatef(cameraRotLag[1], 0.0, 1.0, 0.0);
-	
-	// Render bodies
-	particleRenderer->setSpriteSize(spriteSize);
-	particleRenderer->display();
-	
-	// Update FPS
-	framerateUpdate();
-	
-	glutSwapBuffers();
-
-	glutReportErrors();
-}
-
-// Reshape callback
-void reshape(int w, int h)
-{
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(60.0, (float) w / (float) h, 0.1, 100000.0);
-
-	glMatrixMode(GL_MODELVIEW);
-	glViewport(0, 0, w, h);
-	
-	spriteSize *= (float) w / controller->getScreenWidth();
-	
-	controller->setScreenSize(w, h);
-}
-
-// Mouse pressed button callback
-void mouse(int button, int state, int x, int y)
-{
-	if (state == GLUT_DOWN)
-		controller->setButtonState(button + 1);
-	else if (state == GLUT_UP)
-		controller->setButtonState(0);
-
-	controller->setCameraOxOy(x, y);
-
-	glutPostRedisplay();
-}
-
-// Mouse motion when pressed button callback
-void motion(int x, int y)
-{
-  controller->cameraMotion(x, y);
-	glutPostRedisplay();
-}
-
-// Keyboard pressed key callback
-void key(unsigned char key, int x, int y)
-{
-	switch (key)
-	{
-		case '\033':
-		case 'q':
-				exit(0);
-				break;
-		case '=': // Increase sprite size
-			spriteSize += scaleFactor*0.02f;
-			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);
-			break;
-		case '-': // Decrease sprite size
-			spriteSize -= scaleFactor*0.02f;
-			LIMIT(spriteSize, 0.1f, scaleFactor*2.0f);
-			break;
-	}
-	glutPostRedisplay();
-}
-
-// Idle callback, mandatory to update rendering
-void idle(void)
-{
-	glutPostRedisplay();
-}
-
-// Creates the VBO and binds it to a CUDA resource
-void createVBO(GLuint* vbo)
-{
-	// Create vertex buffer object
-	glGenBuffers(1, vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
-
-	// Initialize vertex buffer object
-	glBufferData(GL_ARRAY_BUFFER, numBodies * 8 * sizeof(float), 0, GL_DYNAMIC_DRAW);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-  // Register this buffer object with CUDA
-  cudaGraphicsGLRegisterBuffer(&cudaVBOResource, *vbo, cudaGraphicsMapFlagsWriteDiscard);
-}
-
-// Deletes the VBO and unbinds it from the CUDA resource
-void deleteVBO(GLuint* vbo)
-{
-	glBindBuffer(1, *vbo);
-	glDeleteBuffers(1, vbo);
-
-	cudaGLUnregisterBufferObject(*vbo);
-
-	*vbo = 0;
-}
 
 // ======================
 //          Main         
@@ -580,36 +369,13 @@ int main(int argc, char** argv)
 	dataMasses = new float[NUM_BODIES];
 	// Data loading
 	loadData("../../../data/dubinski.tab", NUM_BODIES, dataPositions, dataVelocities, dataMasses, scaleFactor);
-		
-	// Create app window
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
-	glutInitWindowSize(720, 480);
-	char windowTitle[256];
-	sprintf(windowTitle, "CUDA Galaxy Simulation (%d bodies)", NUM_BODIES); 
-	glutCreateWindow(windowTitle);
     
 	// CUDA setup
   initCUDA();
-
-	// OpenGL setup	
-	initGL();
-    
-	// GL callback functions
-	glutDisplayFunc(display);
-	glutReshapeFunc(reshape);
-	glutMouseFunc(mouse);
-	glutMotionFunc(motion);
-	glutKeyboardFunc(key);
-	glutIdleFunc(idle);
-
-	// FPS on title
-	framerateTitle(windowTitle);
 	
-	// Start main loop
-  glutMainLoop();
-
-	deleteVBO((GLuint*) &VBO);
+	while (true) {
+		runCuda();
+	}
 
 	// Free heap memory
 	free(dataPositions);
@@ -618,7 +384,6 @@ int main(int argc, char** argv)
 	free(hPositions);
 	free(hVelocities);
 	free(hMasses);
-	delete particleRenderer;
 	delete particleTimer;
 
   return 0;

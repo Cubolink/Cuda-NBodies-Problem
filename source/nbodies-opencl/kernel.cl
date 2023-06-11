@@ -26,7 +26,6 @@ float3 bodyBodyInteraction(float3 iBody, float4 jBody, float3 ai)
 }
 
 __kernel void nBodiesKernelLocal1D(
-    __global float4 *pvbo,
     __global float *positions,
     __global float *velocities,
     __global float *futurePositions,
@@ -83,13 +82,9 @@ __kernel void nBodiesKernelLocal1D(
     // Update VBO
     int positionIndex = i;
     int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
-    pvbo[positionIndex] = (float4) {position.x, position.y, position.z, 1.f};
-    pvbo[velocityIndex] = (float4) {velocity.x, velocity.y, velocity.z, 1.f};
-
 }
 
 __kernel void nBodiesKernelLocal2D(
-    __global float4 *pvbo,
     __global float *positions,
     __global float *velocities,
     __global float *futurePositions,
@@ -152,13 +147,9 @@ __kernel void nBodiesKernelLocal2D(
     // Update VBO
     int positionIndex = i;
     int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
-    pvbo[positionIndex] = (float4) {position.x, position.y, position.z, 1.f};
-    pvbo[velocityIndex] = (float4) {velocity.x, velocity.y, velocity.z, 1.f};
-
 }
 
 __kernel void nBodiesKernelGlobal1D(
-        __global float4 *pvbo,
         __global float *positions,
         __global float *velocities,
         __global float *futurePositions,
@@ -201,13 +192,9 @@ __kernel void nBodiesKernelGlobal1D(
     // Update VBO
     int positionIndex = i;
     int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
-    pvbo[positionIndex] = (float4) {position.x, position.y, position.z, 1.f};
-    pvbo[velocityIndex] = (float4) {velocity.x, velocity.y, velocity.z, 1.f};
-
 }
 
 __kernel void nBodiesKernelGlobal2D(
-    __global float4 *pvbo,
     __global float *positions,
     __global float *velocities,
     __global float *futurePositions,
@@ -256,7 +243,4 @@ __kernel void nBodiesKernelGlobal2D(
     // Update VBO
     int positionIndex = i;
     int velocityIndex = positionIndex + nBodies;// get_local_size(0) * get_num_groups(0);
-    pvbo[positionIndex] = (float4) {position.x, position.y, position.z, 1.f};
-    pvbo[velocityIndex] = (float4) {velocity.x, velocity.y, velocity.z, 1.f};
-
 }

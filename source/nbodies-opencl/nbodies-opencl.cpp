@@ -6,14 +6,6 @@
 #include <fstream>
 #include <vector>
 
-#include <GL/glew.h>
-
-#if defined(__APPLE__) || defined(MACOSX)
-#include <GLUT/glut.h>
-#else
-#include <GL/glut.h>
-#endif
-
 #define __CL_ENABLE_EXCEPTIONS
 
 #ifdef __APPLE__
@@ -22,10 +14,7 @@
 #include <CL/cl.hpp>
 #endif
 
-#include "controller.h"
 #include "data-loader.h"
-#include "framerate.h"
-#include "particle-renderer.h"
 #include "particle-timer.h"
 
 struct float3
@@ -34,9 +23,6 @@ struct float3
     float y;
     float z;
 };
-
-// Number of particles to be loaded and rendered from file
-#define NUM_BODIES 16384
 
 // Simulation parameters
 float scaleFactor = 1.5f;
@@ -52,8 +38,6 @@ cl::Buffer dVelocities;
 cl::Buffer dFuturePositions;
 cl::Buffer dFutureVelocities;
 cl::Buffer dMasses;
-cl::Buffer dVBO;
-cl::BufferGL dGLVBO;
 
 // OpenCL stuff
 cl::CommandQueue queue;
@@ -65,15 +49,10 @@ cl::Kernel nBodiesKernelGlobal2D;
 cl::Kernel *nBodiesKernel;  // pointer to the used kernel
 cl::Context context;
 
-// GL drawing attributes
-GLuint VBO = 0;
-ParticleRenderer* renderer = nullptr;
-float	spriteSize = scaleFactor * 0.25f;
-
 ParticleTimer* particleTimer;
 
-// Controller
-Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
+// Number of particles to be loaded from file
+#define NUM_BODIES 16384
 
 // OpenCL work-group size
 #define GROUP_SIZE 256
@@ -83,8 +62,8 @@ Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 #define LOCAL_MEMORY
 
 // Block configuration
-//#define ONE_DIM_BLOCK
-#define TWO_DIM_BLOCK
+#define ONE_DIM_BLOCK
+// #define TWO_DIM_BLOCK
 
 // OpenCL number of groups
 int clNumGroups;
@@ -171,13 +150,7 @@ void initOpenCL() {
 
     // create a context
     cl::Platform clPlatform = cl::Platform::getDefault();
-    cl_context_properties properties[] = {
-            CL_GL_CONTEXT_KHR, (cl_context_properties) wglGetCurrentContext(),
-            CL_WGL_HDC_KHR, (cl_context_properties) wglGetCurrentDC(),
-            CL_CONTEXT_PLATFORM, (cl_context_properties) clPlatform(),
-            0
-    };
-    context = cl::Context(DEVICE, properties);
+    context = cl::Context(DEVICE);
 
     // get the command queue
     queue = cl::CommandQueue(context);
@@ -197,8 +170,6 @@ void initOpenCL() {
     dFuturePositions = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
     dFutureVelocities = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
     dMasses = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float));
-    dVBO = cl::Buffer(context, CL_MEM_WRITE_ONLY, 8*sizeof(float) * clNumBodies);
-    dGLVBO = cl::BufferGL(context, CL_MEM_READ_WRITE, VBO);
 
     queue.enqueueWriteBuffer(dPositions, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataPositions);
     queue.enqueueWriteBuffer(dVelocities, CL_TRUE, 0, NUM_BODIES*sizeof(float3), dataVelocities);
@@ -213,56 +184,7 @@ void initOpenCL() {
 
 }
 
-// Creates the VBO and binds it to a CUDA resource
-void createVBO(GLuint* vbo)
-{
-    // Create vertex buffer object
-    glGenBuffers(1, vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
-
-    // Initialize vertex buffer object
-    glBufferData(GL_ARRAY_BUFFER, NUM_BODIES * 8 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-}
-
-// Deletes the VBO and unbinds it from the CUDA resource
-void deleteVBO(GLuint* vbo)
-{
-    glBindBuffer(1, *vbo);
-    glDeleteBuffers(1, vbo);
-
-    *vbo = 0;
-}
-
-// Initializes OpenGL
-void initGL()
-{
-    glewInit();
-    if (!glewIsSupported("GL_VERSION_2_0 "
-                         "GL_VERSION_1_5 "
-                         "GL_ARB_multitexture "
-                         "GL_ARB_vertex_buffer_object"))
-    {
-        fprintf(stderr, "Required OpenGL extensions missing.");
-        exit(-1);
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glClearColor(0.0, 0.0, 0.0, 1.0);
-
-    // Particle renderer initialization
-    createVBO((GLuint*) &VBO);
-    renderer = new ParticleRenderer(NUM_BODIES);
-    renderer->setVBO(VBO);
-    renderer->setSpriteSize(0.4f);
-    renderer->setShaders("../../../data/sprite.vert", "../../../data/sprite.frag");
-}
-
 void runSimulation() {  // runOpenCl
-    /// Wait for OpenGL to release its stuff
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glFinish();
 
     // Prepare the kernel
     #ifdef ONE_DIM_BLOCK
@@ -273,17 +195,16 @@ void runSimulation() {  // runOpenCl
         cl::NDRange local(groupSideSize, groupSideSize);
 
     #endif
-    nBodiesKernel->setArg(0, dVBO);
-    nBodiesKernel->setArg(1, dPositions);
-    nBodiesKernel->setArg(2, dVelocities);
-    nBodiesKernel->setArg(3, dFuturePositions);
-    nBodiesKernel->setArg(4, dFutureVelocities);
-    nBodiesKernel->setArg(5, dMasses);
+    nBodiesKernel->setArg(0, dPositions);
+    nBodiesKernel->setArg(1, dVelocities);
+    nBodiesKernel->setArg(2, dFuturePositions);
+    nBodiesKernel->setArg(3, dFutureVelocities);
+    nBodiesKernel->setArg(4, dMasses);
     #ifdef GLOBAL_MEMORY
-        nBodiesKernel->setArg(6, clNumBodies);
+        nBodiesKernel->setArg(5, clNumBodies);
     #elif defined LOCAL_MEMORY
-        nBodiesKernel->setArg(6, GROUP_SIZE * sizeof(cl_float4), nullptr);  // tileData
-        nBodiesKernel->setArg(7, clNumBodies);
+        nBodiesKernel->setArg(5, GROUP_SIZE * sizeof(cl_float4), nullptr);  // tileData
+        nBodiesKernel->setArg(6, clNumBodies);
     #endif
 
     queue.enqueueNDRangeKernel(*nBodiesKernel, cl::NullRange, global, local);
@@ -292,119 +213,14 @@ void runSimulation() {  // runOpenCl
     (*nBodiesKernel)();
     queue.finish();
 
-    /// Update VBO
-    std::vector<cl::Memory> objs;
-    objs.clear();
-    objs.push_back(dGLVBO);
-    // Flush opengl commands and wait for object acquisition
-    if (queue.enqueueAcquireGLObjects(&objs, nullptr, nullptr) != CL_SUCCESS) {
-        std::cout << "Failed acquiring GL object." << std::endl;
-        exit(248);
-    }
-    // Only take the NUM_BODIES <= clNumBodies, ignoring the padded data, so this takes two copies instead of one
-    queue.enqueueCopyBuffer(dVBO, dGLVBO, 0, 0, 4 * sizeof(float) * NUM_BODIES);
-    queue.enqueueCopyBuffer(dVBO, dGLVBO, clNumBodies * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float), NUM_BODIES * 4 * sizeof(float));
-    if (queue.enqueueReleaseGLObjects(&objs) != CL_SUCCESS) {
-        std::cout << "Failed releasing GL object." << std::endl;
-        exit(247);
-    }
-    queue.finish();
-
     particleTimer->endIteration();
 
     // Update positions and velocities for next iteration
     queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
     queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
+
+    queue.finish();
 }
-
-void display()
-{
-    runSimulation();
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // View transform
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    controller->updateCameraProperties();
-    float* camera_trans_lag = controller->getCameraTransLag();
-    float* camera_rot_lag = controller->getCameraRotLag();
-
-    glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
-    glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
-    glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
-
-    renderer->display();
-
-    framerateUpdate();
-
-    glutSwapBuffers();
-
-    glutReportErrors();
-}
-
-
-// Reshape callback
-void reshape(int w, int h)
-{
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(60.0, (float) w / (float) h, 0.1, 100000.0);
-
-    glMatrixMode(GL_MODELVIEW);
-    glViewport(0, 0, w, h);
-
-    spriteSize *= (float) w / controller->getScreenWidth();
-
-    controller->setScreenSize(w, h);
-}
-
-// Mouse pressed button callback
-void mouse(int button, int state, int x, int y)
-{
-    if (state == GLUT_DOWN)
-        controller->setButtonState(button + 1);
-    else if (state == GLUT_UP)
-        controller->setButtonState(0);
-
-    controller->setCameraOxOy(x, y);
-
-    glutPostRedisplay();
-}
-
-// Mouse motion when pressed button callback
-void motion(int x, int y)
-{
-    controller->cameraMotion(x, y);
-    glutPostRedisplay();
-}
-
-// Keyboard pressed key callback
-void key(unsigned char key, int x, int y)
-{
-    switch (key)
-    {
-        case '\033':
-        case 'q':
-            exit(0);
-            break;
-        case 'c':
-            std::cout << "Exporting" << std::endl;
-            particleTimer->exportData("data/");
-            break;
-        default:
-            break;
-    }
-    glutPostRedisplay();
-}
-
-// Idle callback, mandatory to update rendering
-void idle()
-{
-    glutPostRedisplay();
-}
-
 
 int main(int argc, char** argv)
 {
@@ -414,35 +230,13 @@ int main(int argc, char** argv)
     dataMasses = new float[NUM_BODIES];
     loadData("../../../data/dubinski.tab", NUM_BODIES, (float*) dataPositions, (float*) dataVelocities, dataMasses, scaleFactor);
 
-    // Crete app window
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
-    glutInitWindowSize(720, 480);
-    char windowTitle[256];
-    sprintf(windowTitle, "OpenCL Galaxy Simulation (%d bodies)", NUM_BODIES);
-    glutCreateWindow(windowTitle);
-
-    // OpenGL setup
-    initGL();
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
     // OpenCL setup
     initOpenCL();
 
-    // GL callback functions
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutMouseFunc(mouse);
-    glutMotionFunc(motion);
-    glutKeyboardFunc(key);
-    glutIdleFunc(idle);
+    while (true) {
+        runSimulation();
+    }
 
-    framerateTitle(windowTitle);
-
-    // Start main loop
-    glutMainLoop();
-    
-    delete renderer;
     delete dataPositions;
     delete dataVelocities;
     delete dataMasses;

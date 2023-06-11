@@ -11,14 +11,7 @@ if(CUDA_FOUND)
     ${NBODIES_UTIL_INCLUDE_DIRECTORIES}
   )
 
-  if((MSCV) OR (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"))
-    target_link_directories(nbodies-cuda PUBLIC
-      "${PROJECT_SOURCE_DIR}/lib/freeglut-3.0.0MSVC/x64"
-      "${PROJECT_SOURCE_DIR}/lib/glew"
-    )
-  endif()
-
-  target_link_libraries(nbodies-cuda "freeglut.lib" "glew32.lib" ${NBODIES_UTIL_LIBRARY})
+  target_link_libraries(nbodies-cuda ${NBODIES_UTIL_LIBRARY})
 else()
   # CUDA not found, handle the absence
   message(WARNING ">> CUDA not found. Skipping CUDA NBody implementation")
