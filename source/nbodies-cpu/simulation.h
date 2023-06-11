@@ -7,7 +7,6 @@
 
 #include <iostream>
 #include <cmath>
-#include <GL/glew.h>
 #include "data-structs.h"
 #include "particle-timer.h"
 
@@ -67,7 +66,7 @@ void nBodiesKernel(int i, float3 *positions, float3 *velocities, float *masses, 
  * @param pdata
  * @param nBodies
  */
-void cpuComputeNBodies(float3 *positions, float3 *velocities, float *masses, float3 *futurePositions, float3 *futureVelocities, int nBodies, GLuint vbo, ParticleTimer* timer)
+void cpuComputeNBodies(float3 *positions, float3 *velocities, float *masses, float3 *futurePositions, float3 *futureVelocities, int nBodies, ParticleTimer* timer)
 {
     // Start timer iteration
     timer->startIteration(); 
@@ -79,29 +78,6 @@ void cpuComputeNBodies(float3 *positions, float3 *velocities, float *masses, flo
 
     // End timer iteration
     timer->endIteration();
-
-    // New VBO data
-    auto vboData = new float[nBodies * 8];
-
-    for (int i = 0; i < nBodies; i++)
-    {
-        int pIdx = i * 4;
-        int vIdx = pIdx + nBodies * 4;
-
-        vboData[pIdx] = futurePositions[i].x;
-        vboData[pIdx + 1] = futurePositions[i].y;
-        vboData[pIdx + 2] = futurePositions[i].z;
-        vboData[pIdx + 3] = 1.f;
-
-        vboData[vIdx] = futureVelocities[i].x;
-        vboData[vIdx + 1] = futureVelocities[i].y;
-        vboData[vIdx + 2] = futureVelocities[i].z;
-        vboData[vIdx + 3] = 1.f;
-    }
-
-    // Update the VBO data
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, nBodies * 8 * sizeof(float), vboData);
 
     // Update positions and velocities data for next iteration
     memcpy(positions, futurePositions, nBodies * sizeof(float3));
