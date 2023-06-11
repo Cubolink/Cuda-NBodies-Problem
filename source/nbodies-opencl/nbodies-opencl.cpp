@@ -58,7 +58,11 @@ cl::BufferGL dGLVBO;
 // OpenCL stuff
 cl::CommandQueue queue;
 cl::Program program;
-cl::Kernel nBodiesKernel;
+cl::Kernel nBodiesKernelLocal1D;
+cl::Kernel nBodiesKernelLocal2D;
+cl::Kernel nBodiesKernelGlobal1D;
+cl::Kernel nBodiesKernelGlobal2D;
+cl::Kernel *nBodiesKernel;  // pointer to the used kernel
 cl::Context context;
 
 // GL drawing attributes
@@ -73,10 +77,23 @@ Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // OpenCL work-group size
 #define GROUP_SIZE 256
+
+// Memory configuration
+//#define GLOBAL_MEMORY
+#define LOCAL_MEMORY
+
+// Block configuration
+//#define ONE_DIM_BLOCK
+#define TWO_DIM_BLOCK
+
 // OpenCL number of groups
 int clNumGroups;
 // Number of particles our kernel will work after padding, if any
 int clNumBodies;
+// variables when 2D memory
+int groupSideSize;
+int clNumBodiesX;
+int clNumBodiesY;
 
 
 // Clamp macro
@@ -97,6 +114,21 @@ std::string load_program(const std::string& input) {
 
 }
 
+// Utility function for grid dimensions calculation
+int closestDivisorToSquareRoot(int n) {
+    int sqrtN = std::sqrt(n);
+    int closestDivisor = 1;
+
+    for (int i = sqrtN; i >= 1; --i) {
+        if (n % i == 0) {
+            closestDivisor = i;
+            break;
+        }
+    }
+
+    return closestDivisor;
+}
+
 void initOpenCL() {
     // Round up in case NUM_BODIES is not a multiple of GROUP_SIZE
     clNumGroups = (NUM_BODIES + GROUP_SIZE - 1) / GROUP_SIZE;
@@ -105,7 +137,37 @@ void initOpenCL() {
     clNumBodies = clNumGroups * GROUP_SIZE;
     int paddedBodies = (clNumBodies - NUM_BODIES);
 
-    particleTimer = new ParticleTimer(clNumBodies, "local-1d");
+    // 2D block calculations
+    #ifdef TWO_DIM_BLOCK
+    groupSideSize = (int) sqrt(GROUP_SIZE);
+		if (groupSideSize * groupSideSize != GROUP_SIZE) {
+			std::cout << "BLOCK_SIZE has to be a perfect square" << std::endl;
+			exit(1);
+		}
+
+		int gridSide = closestDivisorToSquareRoot(clNumGroups);
+
+    clNumBodiesX = gridSide * groupSideSize; clNumBodiesY = clNumBodies / clNumBodiesX;
+    #endif
+
+    // Define the timer and select the kernel
+    #ifdef GLOBAL_MEMORY
+        #ifdef ONE_DIM_BLOCK
+            particleTimer = new ParticleTimer(clNumBodies, "global-1d");
+            nBodiesKernel = &nBodiesKernelGlobal1D;
+        #else
+            particleTimer = new ParticleTimer(clNumBodies, "global-2d");
+            nBodiesKernel = &nBodiesKernelGlobal2D;
+        #endif
+    #elif defined LOCAL_MEMORY
+        #ifdef ONE_DIM_BLOCK
+            particleTimer = new ParticleTimer(clNumBodies, "local-1d");
+            nBodiesKernel = &nBodiesKernelLocal1D;
+        #else
+            particleTimer = new ParticleTimer(clNumBodies, "local-2d");
+            nBodiesKernel = &nBodiesKernelLocal2D;
+        #endif
+    #endif
 
     // create a context
     cl::Platform clPlatform = cl::Platform::getDefault();
@@ -124,7 +186,10 @@ void initOpenCL() {
     program = cl::Program(context, load_program("../../../source/nbodies-opencl/kernel.cl"), true);
 
     // create the kernel functor
-    nBodiesKernel = cl::Kernel(program, "nBodiesKernel");
+    nBodiesKernelLocal1D = cl::Kernel(program, "nBodiesKernelLocal1D");
+    nBodiesKernelLocal2D = cl::Kernel(program, "nBodiesKernelLocal2D");
+    nBodiesKernelGlobal1D = cl::Kernel(program, "nBodiesKernelGlobal1D");
+    nBodiesKernelGlobal2D = cl::Kernel(program, "nBodiesKernelGlobal2D");
 
     // Init device data, copying data from host for positions, velocities and masses
     dPositions = cl::Buffer(context, CL_MEM_READ_WRITE, clNumBodies*sizeof(float3));
@@ -196,21 +261,31 @@ void initGL()
 
 void runSimulation() {  // runOpenCl
     // Prepare the kernel
-    cl::NDRange global(clNumBodies);  // Total number of work items
-    cl::NDRange local(GROUP_SIZE);  // Work items in each work-group
+    #ifdef ONE_DIM_BLOCK
+        cl::NDRange global(clNumBodies);  // Total number of work items
+        cl::NDRange local(GROUP_SIZE);  // Work items in each work-group
+    #elif defined TWO_DIM_BLOCK
+        cl::NDRange global(clNumBodiesX, clNumBodiesY);
+        cl::NDRange local(groupSideSize, groupSideSize);
 
-    nBodiesKernel.setArg(0, dVBO);
-    nBodiesKernel.setArg(1, dPositions);
-    nBodiesKernel.setArg(2, dVelocities);
-    nBodiesKernel.setArg(3, dFuturePositions);
-    nBodiesKernel.setArg(4, dFutureVelocities);
-    nBodiesKernel.setArg(5, dMasses);
-    nBodiesKernel.setArg(6, GROUP_SIZE*sizeof(cl_float4), nullptr);  // tileData
-    nBodiesKernel.setArg(7, clNumBodies);
-    queue.enqueueNDRangeKernel(nBodiesKernel, cl::NullRange, global, local);
+    #endif
+    nBodiesKernel->setArg(0, dVBO);
+    nBodiesKernel->setArg(1, dPositions);
+    nBodiesKernel->setArg(2, dVelocities);
+    nBodiesKernel->setArg(3, dFuturePositions);
+    nBodiesKernel->setArg(4, dFutureVelocities);
+    nBodiesKernel->setArg(5, dMasses);
+    #ifdef GLOBAL_MEMORY
+        nBodiesKernel->setArg(6, clNumBodies);
+    #elif defined LOCAL_MEMORY
+        nBodiesKernel->setArg(6, GROUP_SIZE * sizeof(cl_float4), nullptr);  // tileData
+        nBodiesKernel->setArg(7, clNumBodies);
+    #endif
+
+    queue.enqueueNDRangeKernel(*nBodiesKernel, cl::NullRange, global, local);
     // Start timer iteration and run the kernel
     particleTimer->startIteration();
-    nBodiesKernel();
+    (*nBodiesKernel)();
     queue.finish();
     particleTimer->endIteration();
 
