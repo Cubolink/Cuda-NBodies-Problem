@@ -153,18 +153,18 @@ void initOpenCL() {
     // Define the timer and select the kernel
     #ifdef GLOBAL_MEMORY
         #ifdef ONE_DIM_BLOCK
-            particleTimer = new ParticleTimer(clNumBodies, "global-1d");
+            particleTimer = new ParticleTimer(clNumBodies, "global-1d", GROUP_SIZE, NUM_BODIES);
             nBodiesKernel = &nBodiesKernelGlobal1D;
         #else
-            particleTimer = new ParticleTimer(clNumBodies, "global-2d");
+            particleTimer = new ParticleTimer(clNumBodies, "global-2d", GROUP_SIZE, NUM_BODIES);
             nBodiesKernel = &nBodiesKernelGlobal2D;
         #endif
     #elif defined LOCAL_MEMORY
         #ifdef ONE_DIM_BLOCK
-            particleTimer = new ParticleTimer(clNumBodies, "local-1d");
+            particleTimer = new ParticleTimer(clNumBodies, "local-1d", GROUP_SIZE, NUM_BODIES);
             nBodiesKernel = &nBodiesKernelLocal1D;
         #else
-            particleTimer = new ParticleTimer(clNumBodies, "local-2d");
+            particleTimer = new ParticleTimer(clNumBodies, "local-2d", GROUP_SIZE, NUM_BODIES);
             nBodiesKernel = &nBodiesKernelLocal2D;
         #endif
     #endif

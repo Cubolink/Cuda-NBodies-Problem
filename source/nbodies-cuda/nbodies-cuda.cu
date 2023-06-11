@@ -136,15 +136,15 @@ void initCUDA()
 	// Define the timer
 	#ifdef GLOBAL_MEMORY
 		#ifdef ONE_DIM_BLOCK
-			particleTimer = new ParticleTimer(numBodies, "global-1d");
+			particleTimer = new ParticleTimer(numBodies, "global-1d", BLOCK_SIZE, NUM_BODIES);
 		#else
-			particleTimer = new ParticleTimer(numBodies, "global-2d");
+			particleTimer = new ParticleTimer(numBodies, "global-2d", BLOCK_SIZE, NUM_BODIES);
 		#endif
 	#elif defined LOCAL_MEMORY
 		#ifdef ONE_DIM_BLOCK
-			particleTimer = new ParticleTimer(numBodies, "local-1d");
+			particleTimer = new ParticleTimer(numBodies, "local-1d", BLOCK_SIZE, NUM_BODIES);
 		#else
-			particleTimer = new ParticleTimer(numBodies, "local-2d");
+			particleTimer = new ParticleTimer(numBodies, "local-2d", BLOCK_SIZE, NUM_BODIES);
 		#endif
 	#endif
 

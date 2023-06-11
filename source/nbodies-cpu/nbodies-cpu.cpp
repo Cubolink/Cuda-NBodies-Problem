@@ -34,7 +34,7 @@ float3 *futureVelocities = nullptr;
 
 GLuint VBO = 0;
 ParticleRenderer* renderer = nullptr;
-ParticleTimer* timer = new ParticleTimer(NUM_BODIES, "");
+ParticleTimer* timer = new ParticleTimer(NUM_BODIES, "", 0, NUM_BODIES);
 Controller* controller = new Controller(scaleFactor, 720.0f, 480.0f);
 
 // Creates the VBO and binds it to a CUDA resource

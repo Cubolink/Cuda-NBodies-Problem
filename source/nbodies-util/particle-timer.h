@@ -13,7 +13,7 @@
 class ParticleTimer
 {
 public:
-    ParticleTimer(int nParticles, const std::string &dataFoldername);
+    ParticleTimer(int nParticles, const std::string &dataFoldername, int blockSize, int realNBodies);
     void startIteration();
     void endIteration();
     void exportData(const std::string &folder);

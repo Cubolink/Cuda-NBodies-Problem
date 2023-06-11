@@ -9,12 +9,12 @@
 #include <fstream>
 #include <filesystem>
 
-ParticleTimer::ParticleTimer(int nParticles, const std::string &dataFolderName)
+ParticleTimer::ParticleTimer(int nParticles, const std::string &dataFolderName, int blockSize, int realNBodies)
 : m_numParticles(nParticles),
   m_totalElapsedTime(0.0),
   m_iterationCount(0),
   m_dataExported(false),
-  m_dataFolderName(dataFolderName)
+  m_dataFolderName(dataFolderName +"-(" + std::to_string(blockSize) + "," + std::to_string(realNBodies) + ")")
 {
 }
 
