@@ -133,7 +133,7 @@ void initCUDA()
 		gridSize.x = gridSide; gridSize.y = numBlocks / gridSide;
 	#endif
 
-	// Run the kernel
+	// Define the timer
 	#ifdef GLOBAL_MEMORY
 		#ifdef ONE_DIM_BLOCK
 			particleTimer = new ParticleTimer(numBodies, "global-1d");
