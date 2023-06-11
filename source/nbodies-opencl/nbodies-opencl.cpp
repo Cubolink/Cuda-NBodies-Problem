@@ -260,6 +260,10 @@ void initGL()
 }
 
 void runSimulation() {  // runOpenCl
+    /// Wait for OpenGL to release its stuff
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glFinish();
+
     // Prepare the kernel
     #ifdef ONE_DIM_BLOCK
         cl::NDRange global(clNumBodies);  // Total number of work items
@@ -287,15 +291,8 @@ void runSimulation() {  // runOpenCl
     particleTimer->startIteration();
     (*nBodiesKernel)();
     queue.finish();
-    particleTimer->endIteration();
 
-    // Update positions and velocities for next iteration
-    queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
-    queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
-
-    /// Update the VBO data
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glFinish();
+    /// Update VBO
     std::vector<cl::Memory> objs;
     objs.clear();
     objs.push_back(dGLVBO);
@@ -313,6 +310,11 @@ void runSimulation() {  // runOpenCl
     }
     queue.finish();
 
+    particleTimer->endIteration();
+
+    // Update positions and velocities for next iteration
+    queue.enqueueCopyBuffer(dFuturePositions, dPositions, 0, 0, clNumBodies * 3 * sizeof(float));
+    queue.enqueueCopyBuffer(dFutureVelocities, dVelocities, 0, 0, clNumBodies * 3 * sizeof(float));
 }
 
 void display()
