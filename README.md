@@ -40,8 +40,54 @@ so you can run
 make
 ```
 
-If you are using a Visual Studio compiler, you can run
+If you are using a Visual Studio compiler, you can open the solution file with your Visual Studio IDE and compile it from there.
+
+If you want to use the MSBuild compiler from terminal, you can run
 ```console
-msbuild galaxy.sln
+msbuild nbodies-problem.sln
 ```
-Or open the solution file with your Visual Studio IDE and compile it from there.
+
+### Running the Project
+
+In your build folder, you will have the CPU, CUDA and OpenCL implementations inside a `your_build_folder/source` folder.
+If you are using the Visual Studio IDE, you can open the solution (that you opened to compile) and run the projects from there.
+If you used another method, or used msbuild, you will have to copy some folders first:
+* Copy the `data` folder (which contains shaders and galaxy data) into `your_build` folder.
+* Copy the `source/nbodies-opencl/kernel.cl` file of the project, into `your_build/source/nbodies-opencl`.
+
+#### Changing the experiment variables
+
+We have provided some macros you can comment/uncomment in order to change the parameters.
+
+The CPU, CUDA and OpenCL implementations provide the following macro you can change.
+```
+// Number of particles to be loaded from file
+#define NUM_BODIES 16384
+```
+
+The following macros are only available in CUDA and OpenCL.
+```
+// Block size
+#define BLOCK_SIZE 256  // GROUP_SIZE in OpenCL
+```
+
+Make sure you only define one of the following macros.
+```
+// Memory configuration
+#define GLOBAL_MEMORY
+// #define LOCAL_MEMORY
+```
+
+Same here.
+
+```
+// Block configuration
+#define ONE_DIM_BLOCK
+// #define TWO_DIM_BLOCK
+```
+
+### Running without OpenGL
+
+You may want to run the experiments without displaying the galaxies with OpenGL.
+For this, you can check out the `main-closed-gl` branch where we have provided the same implementations, but removing the
+OpenGL dependency.
